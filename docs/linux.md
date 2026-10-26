@@ -29,14 +29,17 @@ These still need Linux implementations or qualification:
 
 - Native download transport.
 - Extension hosting. WebKitGTK has no native WebExtension runtime.
-- Ask's native page reader.
+- Ask's native page reader and page assistant commands. These are reported as
+  unavailable until the native reader is implemented.
 - Work's native browser adapters.
 - Persistent application credentials through Secret Service.
 - A qualified sandbox for Work command execution.
 
-Window behavior, global shortcuts and other desktop integration also need
-testing across X11 and Wayland compositors. Linux onboarding stays resizable
-so Wayland can fit it to displays smaller than the preferred window size.
+The launcher shortcut recorder reports unsupported on Linux in this initial
+build path. X11 and Wayland registration still needs to be wired and qualified.
+Window behavior and other desktop integration also need testing across both
+compositor types. Linux onboarding stays resizable so Wayland can fit the
+window to displays smaller than the preferred size.
 
 ## Targeted checks
 
