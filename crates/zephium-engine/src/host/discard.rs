@@ -721,7 +721,7 @@ impl EngineHost {
         if self.erasure_tombstones.contains(&profile) || self.picker.is_some() {
             return false;
         }
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         if self
             .downloads
             .as_ref()

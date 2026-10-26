@@ -6330,7 +6330,7 @@ const LEAD_KEYCHAIN_LOADER: &str = r#"pub(super) fn read(service: &str) -> Resul
     }"#;
 
 const WINDOWS_VAULT_RETRY_SLEEP: &str = "std::thread::sleep(Duration::from_millis(40));";
-const WINDOWS_VAULT_LOADER: &str = r#"fn load_windows_credential<P: AgentCredentialBinding>(
+const WINDOWS_VAULT_LOADER: &str = r#"fn load_native_credential<P: AgentCredentialBinding>(
     provider: P,
     target: &str,
 ) -> Result<AgentProviderCredential<P>, AgentProviderVaultError> {

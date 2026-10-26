@@ -15,6 +15,7 @@ use crate::{
   DownloadPolicy, Error, RequestAsyncResponder,
 };
 use gtk::glib::{self, MainContext, ObjectExt, ObjectType};
+use gtk::prelude::WidgetExt;
 use http::{
   header::CONTENT_TYPE, HeaderName, HeaderValue, Request, Response as HttpResponse, StatusCode,
 };
@@ -121,6 +122,16 @@ impl WebContextImpl {
     if !context.is_sandbox_enabled() {
       context.set_sandbox_enabled(true);
     }
+    // Context-only downloads have no originating view and therefore no
+    // embedder principal, permission or destination owner. Deny them even
+    // before the first view's scoped download handler is installed.
+    context.connect_download_started(|context, download| {
+      if download.web_view().is_none() {
+        // Cancelling again from another view's handler can crash WebKitGTK.
+        context.stop_signal_emission_by_name("download-started");
+        download.cancel();
+      }
+    });
     let automation = false;
     context.set_automation_allowed(automation);
 
@@ -218,6 +229,8 @@ pub trait WebContextExt {
 
   fn register_download_handler(
     &mut self,
+    webview: &WebView,
+    native_download_handler: Option<Box<dyn Fn(&webkit2gtk::Download)>>,
     policy: DownloadPolicy,
     download_started_callback: Option<Box<dyn FnMut(String, &mut PathBuf) -> bool>>,
     download_completed_callback: Option<Rc<dyn Fn(String, Option<PathBuf>, bool) + 'static>>,
@@ -455,22 +468,49 @@ impl WebContextExt for super::WebContext {
 
   fn register_download_handler(
     &mut self,
+    webview: &WebView,
+    native_download_handler: Option<Box<dyn Fn(&webkit2gtk::Download)>>,
     policy: DownloadPolicy,
     download_started_handler: Option<Box<dyn FnMut(String, &mut PathBuf) -> bool>>,
     download_completed_handler: Option<Rc<dyn Fn(String, Option<PathBuf>, bool) + 'static>>,
   ) {
     let context = &self.os.context;
-
-    if policy.inspect_metadata(|| ()).is_none() {
-      // This signal is installed before the WebView's first navigation. Do not
-      // request URI, filename, destination, or completion metadata: the native
-      // object is cancelled at the first construction-time interception point.
-      context.connect_download_started(|_context, download| download.cancel());
+    let view = webview.downgrade();
+    let deny = policy.inspect_metadata(|| ()).is_none();
+    let handler = native_download_handler;
+    if deny || handler.is_some() {
+      let signal = context.connect_download_started(move |_context, download| {
+        let Some(view) = view.upgrade() else { return };
+        let source = download.web_view();
+        if source.as_ref() != Some(&view) {
+          return;
+        }
+        if deny {
+          download.cancel();
+        } else if let Some(handler) = &handler {
+          if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler(download))).is_err() {
+            download.cancel();
+          }
+        }
+      });
+      let context = context.downgrade();
+      let signal = RefCell::new(Some(signal));
+      webview.connect_destroy(move |_| {
+        if let (Some(context), Some(signal)) = (context.upgrade(), signal.borrow_mut().take()) {
+          context.disconnect(signal);
+        }
+      });
       return;
     }
 
     let download_started_handler = Rc::new(RefCell::new(download_started_handler));
-    context.connect_download_started(move |_context, download| {
+    let view = webview.downgrade();
+    let signal = context.connect_download_started(move |_context, download| {
+      let Some(view) = view.upgrade() else { return };
+      let source = download.web_view();
+      if source.as_ref() != Some(&view) {
+        return;
+      }
       let failed = Rc::new(Cell::new(false));
       let download_started_handler = download_started_handler.clone();
       download.connect_decide_destination(move |download, suggested_filename| {
@@ -537,6 +577,13 @@ impl WebContextExt for super::WebContext {
             }
           }
         });
+      }
+    });
+    let context = context.downgrade();
+    let signal = RefCell::new(Some(signal));
+    webview.connect_destroy(move |_| {
+      if let (Some(context), Some(signal)) = (context.upgrade(), signal.borrow_mut().take()) {
+        context.disconnect(signal);
       }
     });
   }

@@ -32,7 +32,7 @@ pub(crate) struct Keymap {
     #[cfg(target_os = "linux")]
     window_table: Arc<RwLock<Vec<Shortcut>>>,
     #[cfg(target_os = "linux")]
-    linux_launcher: OnceLock<Option<linux_shortcut::LinuxLauncherShortcut>>,
+    linux_launcher: RwLock<Option<linux_shortcut::LinuxLauncherShortcut>>,
     /// Keyboard-only commands, read by the macOS key monitor. Everything else
     /// on macOS is a menu key equivalent.
     #[cfg(target_os = "macos")]
@@ -102,7 +102,7 @@ impl Keymap {
         &self,
         launcher: Option<linux_shortcut::LinuxLauncherShortcut>,
     ) -> Arc<RwLock<Vec<Shortcut>>> {
-        let _ = self.linux_launcher.set(launcher);
+        *write(&self.linux_launcher) = launcher;
         self.refresh_tables();
         self.window_table.clone()
     }
@@ -125,8 +125,10 @@ impl Keymap {
             } else {
                 self.engine_table()
             };
-            if let Some(Some(launcher)) = self.linux_launcher.get().filter(|_| !recording) {
-                table.push(launcher.focused_shortcut());
+            if !recording {
+                if let Some(launcher) = *read(&self.linux_launcher) {
+                    table.push(launcher.focused_shortcut());
+                }
             }
             *write(&self.window_table) = table;
         }
@@ -158,6 +160,7 @@ impl Keymap {
             .is_none_or(|index| !self.off[index].load(Ordering::Acquire))
     }
 
+    #[cfg(any(target_os = "macos", target_os = "windows", test))]
     pub(crate) fn ai_enabled(&self) -> bool {
         self.feature_on("ai")
     }
@@ -184,7 +187,7 @@ impl Keymap {
         changed
     }
 
-    fn set_recording(&self, recording: bool) {
+    pub(crate) fn set_recording(&self, recording: bool) {
         if self.recording.swap(recording, Ordering::AcqRel) != recording {
             self.refresh_tables();
         }
@@ -498,6 +501,28 @@ pub(crate) fn keymap_reset(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_launcher_rebind_and_recording_refresh_existing_window_tables() {
+        let keymap = Keymap::default();
+        let first = linux_shortcut::LinuxLauncherShortcut::parse("Ctrl+Shift+F5").unwrap();
+        let next = linux_shortcut::LinuxLauncherShortcut::parse("Ctrl+Shift+F6").unwrap();
+        let table = keymap.window_table(Some(first));
+        let launcher = || {
+            read(&table)
+                .iter()
+                .find(|key| key.id == "launcher.toggle")
+                .cloned()
+        };
+        assert_eq!(launcher().unwrap().key, first.focused_shortcut().key);
+        keymap.window_table(Some(next));
+        assert_eq!(launcher().unwrap().key, next.focused_shortcut().key);
+        keymap.set_recording(true);
+        assert!(read(&table).is_empty());
+        keymap.set_recording(false);
+        assert_eq!(launcher().unwrap().key, next.focused_shortcut().key);
+    }
 
     #[test]
     fn page_tables_carry_work_keys_only_while_the_pane_is_shown() {

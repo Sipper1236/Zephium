@@ -1,5 +1,5 @@
 //! Safe, bounded OS vault operations for native secret owners: Windows
-//! Credential Manager, and generic passwords in the macOS login Keychain.
+//! Credential Manager, macOS login Keychain, and Linux Secret Service.
 #![deny(unsafe_op_in_unsafe_fn, clippy::undocumented_unsafe_blocks)]
 #![deny(missing_docs)]
 
@@ -80,6 +80,11 @@ pub use windows::{delete, list, present, read, write};
 mod macos;
 #[cfg(target_os = "macos")]
 pub use macos::{delete, present, read, write};
+
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "linux")]
+pub use linux::{delete, list, present, read, write};
 
 #[cfg(test)]
 mod tests {

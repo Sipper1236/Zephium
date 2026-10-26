@@ -1,0 +1,52 @@
+# Build a native package from a local Zephium checkout. See docs/linux.md.
+pkgname=zephium
+pkgver=1.0.3
+pkgrel=3
+pkgdesc='A private browser and work environment using WebKitGTK'
+arch=('x86_64' 'aarch64')
+url='https://zephium.app'
+license=('MPL-2.0' 'CC-BY-SA-3.0')
+depends=('webkit2gtk-4.1' 'gtk3' 'libayatana-appindicator' 'librsvg'
+         'openssl' 'sqlite' 'xdg-utils' 'gst-plugins-base' 'gst-plugins-good')
+makedepends=('rustup' 'nodejs-lts-krypton' 'pnpm' 'python' 'cmake' 'pkgconf'
+             'desktop-file-utils')
+optdepends=('gnome-keyring: Secret Service provider for accounts, provider keys and MCP credentials'
+            'kwallet: alternative Secret Service provider (enable its Secret Service integration)'
+            'xdg-desktop-portal: Wayland global shortcut portal'
+            'gst-libav: additional media codecs')
+options=('!lto')
+source=()
+sha256sums=()
+
+build() {
+  cd "$startdir/../.."
+  pnpm install --frozen-lockfile --config.engine-strict=true
+  pnpm --dir desktop exec tauri build --no-bundle -- --locked
+}
+
+check() {
+  cd "$startdir/../.."
+  node --test scripts/require-supported-platform.test.mjs
+  python -m unittest discover -s scripts/ci -p 'test_probe_linux_startup.py'
+  desktop-file-validate packaging/arch/zephium.desktop
+}
+
+package() {
+  cd "$startdir/../.."
+  install -Dm755 target/release/zephium-desktop "$pkgdir/usr/bin/zephium-desktop"
+  install -Dm644 packaging/arch/zephium.desktop \
+    "$pkgdir/usr/share/applications/app.zephium.desktop"
+  install -Dm644 desktop/icons/128x128.png \
+    "$pkgdir/usr/share/icons/hicolor/128x128/apps/app.zephium.png"
+  install -Dm644 desktop/icons/32x32.png \
+    "$pkgdir/usr/share/icons/hicolor/32x32/apps/app.zephium.png"
+  install -Dm644 desktop/icons/128x128@2x.png \
+    "$pkgdir/usr/share/icons/hicolor/256x256/apps/app.zephium.png"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 assets/blocker-seed/v1/LICENSE-CC-BY-SA-3.0.txt \
+    "$pkgdir/usr/lib/zephium-desktop/licenses/blocker/CC-BY-SA-3.0.txt"
+  install -Dm644 assets/blocker-seed/v1/NOTICE \
+    "$pkgdir/usr/lib/zephium-desktop/licenses/blocker/EasyList-EasyPrivacy-NOTICE.txt"
+  install -Dm644 LICENSE \
+    "$pkgdir/usr/lib/zephium-desktop/licenses/Zephium-MPL-2.0.txt"
+}

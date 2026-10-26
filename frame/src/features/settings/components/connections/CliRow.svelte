@@ -27,6 +27,8 @@
   const status = $derived.by(() => {
     if (!cli) return { tone: "quiet", text: m.connections_checking() };
     switch (cli.status) {
+      case "unavailable":
+        return { tone: "quiet", text: m.connections_cli_unavailable() };
       case "signed_in":
         return {
           tone: "good",

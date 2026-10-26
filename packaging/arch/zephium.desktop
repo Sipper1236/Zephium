@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Zephium
+Comment=A private browser and work environment
+Exec=zephium-desktop %U
+Icon=app.zephium
+Type=Application
+Terminal=false
+Categories=Network;WebBrowser;
+MimeType=x-scheme-handler/http;x-scheme-handler/https;
+StartupWMClass=app.zephium

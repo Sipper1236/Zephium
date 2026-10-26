@@ -3978,7 +3978,9 @@ export type WorkCliRowV1_Serialize = {
 	account: string | null,
 };
 
-export type WorkCliStatusV1 = "signed_in" | "signed_out" |
+export type WorkCliStatusV1 =
+/**  The command broker does not admit this connection or its status probe. */
+"unavailable" | "signed_in" | "signed_out" |
 /**  Installed and needs no account (git). */
 "ready" | "missing" | "unknown";
 

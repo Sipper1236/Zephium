@@ -8,6 +8,9 @@ mod platform;
 #[cfg(target_os = "windows")]
 #[path = "downloads/platform_windows.rs"]
 mod platform;
+#[cfg(target_os = "linux")]
+#[path = "downloads/platform_linux.rs"]
+mod platform;
 mod recovery;
 mod ui;
 use platform::{Delegate, DialogLease, DirectoryPanel, Native, SavePanel, Source, Timer};
@@ -27,7 +30,7 @@ use zephium_core::ids::{DownloadId, ProfileId};
 use zephium_core::permissions::PageOrigin;
 use zephium_core::ports::{engine::Partition, store::Store};
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 use super::download_files::verify_file;
 use super::download_files::Destination;
 use super::permits::EventPermit;
@@ -120,11 +123,13 @@ impl DecisionDeadline {
 
 /// One native, user-admitted initial navigation may download before its child
 /// is presented. Dropping an unconsumed admission also retires its empty tab.
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(in crate::host) struct InitialDownload {
     #[cfg(target_os = "macos")]
     pub window: objc2::rc::Retained<objc2_app_kit::NSWindow>,
     pub on_started: Option<Box<dyn FnOnce()>>,
 }
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 impl Drop for InitialDownload {
     fn drop(&mut self) {
         if let Some(done) = self.on_started.take() {
@@ -227,7 +232,7 @@ impl Downloads {
     }
     /// Admitted macOS transfers keep their WKDownload without the page; only
     /// an unanswered destination decision still depends on it.
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(in crate::host) fn has_pending_decision(&self, profile: ProfileId) -> bool {
         self.active.try_borrow().map_or(true, |active| {
             active
@@ -636,6 +641,8 @@ impl Downloads {
     fn message(self: &Rc<Self>, message: Message) {
         #[cfg(target_os = "macos")]
         let native_notice = matches!(message, Message::Cancelled(_));
+        #[cfg(target_os = "linux")]
+        let native_notice = false;
         #[cfg(target_os = "windows")]
         let native_notice = matches!(message, Message::RuntimeExited(_));
         if !native_notice {

@@ -64,6 +64,9 @@ One switch away is **Work**. Your work already happens in the browser, where
 your tabs, logins and history are. Work brings agents there instead of asking
 you to move somewhere else, and lets you watch them do it.
 
+Experimental Linux development, including native Arch Linux packaging, is
+available from source: see [the Linux guide](docs/linux.md).
+
 ## Work
 
 Describe an outcome in your own words: plan a trip, compare vendors, design a
@@ -212,7 +215,8 @@ Prerequisites:
 - pnpm, through Corepack: `corepack enable`.
 - The [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your
   platform: Xcode Command Line Tools on macOS, or the Microsoft C++ Build Tools
-  and WebView2 on Windows.
+  and WebView2 on Windows. For experimental Linux development, follow
+  [the Linux guide](docs/linux.md) for GTK/WebKitGTK and distribution dependencies.
 
 ```sh
 git clone https://github.com/zephium-browser/Zephium.git
@@ -222,7 +226,8 @@ pnpm dev
 ```
 
 Development builds use their own `app.zephium.dev` profile, so they do not
-touch the data of an installed Zephium. Linux is not supported yet. See
+touch the data of an installed Zephium. Linux/Arch support is experimental; see
+[the Linux guide](docs/linux.md) for setup and native feature limitations. See
 [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
 ## Architecture

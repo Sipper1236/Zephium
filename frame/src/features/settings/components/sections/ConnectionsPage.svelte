@@ -28,6 +28,7 @@
   const TOOLS = ["gh", "git", "codex", "claude"] as const;
   const servers = $derived(session?.servers ?? []);
   const taken = $derived(servers.map((row) => row.server.id));
+  const cliUnavailable = $derived(session?.clis?.some((row) => row.status === "unavailable"));
   let adding = $state(false);
 
   async function add(draft: WorkServerDraftV1) {
@@ -40,7 +41,10 @@
 {:else if session?.unavailable}
   <p class="connections-note" role="alert">{m.connections_unavailable()}</p>
 {:else}
-  <SettingsGroup title={m.connections_mac_group()} description={m.connections_mac_note()}>
+  <SettingsGroup
+    title={m.connections_mac_group()}
+    description={cliUnavailable ? m.connections_cli_unavailable_note() : m.connections_mac_note()}
+  >
     {#each TOOLS as id (id)}<CliRow
         {id}
         cli={session?.clis?.find((row) => row.id === id) ?? null}

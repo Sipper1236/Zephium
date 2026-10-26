@@ -10,6 +10,15 @@ reviewed native security adapter under active hardening, not an unmodified copy
 of the crates.io package and not yet an externally audited production boundary.
 Its security-relevant deltas currently enforce these invariants:
 
+- GTK exposes an opt-in native `WebKitDownload` handoff on the Unix builder.
+  Each shared-context download signal is scoped to the exact originating
+  WebView, including deny policies, and disconnected when that view is
+  destroyed. An unrelated deny-only view cannot cancel an admitted transfer.
+  No GTK or WebKit default destination is chosen by this handoff; the embedder
+  must retain the native transfer and decide its destination or cancel it.
+  Zephium uses WebKitGTK 2.40's asynchronous destination contract, the shared
+  download coordinator, and identity-checked filesystem publication.
+
 - macOS file selection is deny-by-default with an explicit embedder callback.
   Native frame origins are bounded before Rust allocation. The single-use,
   non-Send responder cancels on drop, including unwind, and returns only native

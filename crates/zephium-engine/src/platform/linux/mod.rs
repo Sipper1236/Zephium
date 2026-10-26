@@ -5,10 +5,6 @@ mod content_filter;
 mod find;
 mod stage;
 
-pub(crate) fn external_app_name(_url: &str) -> Option<String> {
-    None
-}
-
 pub(crate) fn open_external_app(_url: &str) -> bool {
     false
 }
@@ -1229,9 +1225,16 @@ mod tests {
             std::fs::read(format!("/proc/{pid}/cmdline"))
                 .ok()
                 .map(|bytes| {
-                    String::from_utf8_lossy(&bytes)
-                        .replace('\0', " ")
-                        .contains("WebKitWebProcess")
+                    // Bubblewrap's command line also contains the renderer
+                    // path while it is still installing confinement. Inspect
+                    // the executable argument so assertions observe the real
+                    // renderer after exec, rather than that transient wrapper.
+                    bytes
+                        .split(|byte| *byte == 0)
+                        .next()
+                        .and_then(|argument| std::str::from_utf8(argument).ok())
+                        .and_then(|argument| Path::new(argument).file_name())
+                        .is_some_and(|name| name == "WebKitWebProcess")
                 })
                 .unwrap_or(false)
         })
@@ -1248,7 +1251,7 @@ mod tests {
             }
             assert!(
                 Instant::now() < deadline,
-                "WebKitGTK did not spawn a descendant WebKitWebProcess"
+                "WebKitGTK did not start a descendant WebKitWebProcess"
             );
             std::thread::sleep(Duration::from_millis(10));
         }
@@ -1476,11 +1479,15 @@ mod tests {
             || None,
         )
         .is_ok());
+        let review_grace_end =
+            zephium_core::webkitgtk::SECURITY_FLOOR_REVIEW_DEADLINE_EXCLUSIVE_UNIX_SECONDS
+                + zephium_core::runtime_security::RUNTIME_REVIEW_GRACE_SECONDS;
         assert_eq!(
-            enforce_runtime_version(
-                (2, 54, 1),
-                zephium_core::webkitgtk::SECURITY_FLOOR_REVIEW_DEADLINE_EXCLUSIVE_UNIX_SECONDS,
-            ),
+            enforce_runtime_version((2, 54, 1), review_grace_end - 1),
+            Ok(zephium_core::runtime_security::RuntimeSecurityAdvisories::new()),
+        );
+        assert_eq!(
+            enforce_runtime_version((2, 54, 1), review_grace_end),
             Ok(
                 zephium_core::runtime_security::RuntimeSecurityAdvisories::from_advisory(
                     zephium_core::runtime_security::RuntimeSecurityAdvisory::review_overdue(),
@@ -1659,6 +1666,13 @@ mod tests {
             })
             .build_gtk(&container)
             .expect("persistent Wry WebView");
+        let page_loaded = Rc::new(Cell::new(false));
+        let page_loaded_signal = page_loaded.clone();
+        persistent.webview().connect_load_changed(move |_, event| {
+            if event == webkit2gtk::LoadEvent::Finished {
+                page_loaded_signal.set(true);
+            }
+        });
         configure(
             &persistent,
             0.0,
@@ -1677,19 +1691,83 @@ mod tests {
         assert!(persistent_context.is_sandbox_enabled());
         assert!(persistent_context.is_process_swap_on_cross_site_navigation_enabled());
         window.show_all();
-        persistent
-            .load_url(
-                "data:text/html,<title>hostile renderer probe</title><script>\
-                 window.ipc.postMessage(window.webkit?.messageHandlers?.wryIpc \
-                   ? 'page-native-handler-visible' : 'bounded-ipc-ok');\
-                 document.dispatchEvent(new CustomEvent('wry-ipc-message-v1', \
-                   {detail: 'x'.repeat(70000)}));\
-                 </script>",
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0))
+            .expect("bind local hostile test document server");
+        listener
+            .set_nonblocking(true)
+            .expect("bound test server accept wait");
+        let page_address = listener.local_addr().expect("local test server address");
+        let test_server = std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let mut stream = loop {
+                match listener.accept() {
+                    Ok((stream, _)) => break stream,
+                    Err(error)
+                        if error.kind() == std::io::ErrorKind::WouldBlock
+                            && Instant::now() < deadline =>
+                    {
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(error) => panic!("accept WebKit test request: {error}"),
+                }
+            };
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .expect("bound test request read wait");
+            stream
+                .set_write_timeout(Some(Duration::from_secs(2)))
+                .expect("bound test response write wait");
+            let mut request = [0_u8; 4096];
+            let received = stream.read(&mut request).expect("read WebKit test request");
+            assert!(
+                received > 0,
+                "WebKit closed the test request before sending headers"
+            );
+            let body = b"<!doctype html><title>hostile renderer probe</title>";
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
             )
+            .expect("write test document headers");
+            stream.write_all(body).expect("write test document");
+        });
+        persistent
+            .load_url(&format!("http://{page_address}/hostile.html"))
             .expect("start a real WebKitWebProcess");
         let web_process = wait_for_web_process(std::process::id());
         prove_web_process_namespace_and_filter_state(web_process);
 
+        let load_deadline = Instant::now() + Duration::from_secs(5);
+        while !page_loaded.get() && Instant::now() < load_deadline {
+            while gtk::events_pending() {
+                gtk::main_iteration_do(false);
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            page_loaded.get(),
+            "hostile test document did not finish loading"
+        );
+        test_server.join().expect("local hostile test server");
+        assert_eq!(
+            persistent.webview().title().as_deref(),
+            Some("hostile renderer probe"),
+            "IPC probe must run on the served test document"
+        );
+        persistent
+            .evaluate_script(
+                r#"if (window.ipc) {
+                  window.ipc.postMessage(window.webkit?.messageHandlers?.wryIpc
+                    ? 'page-native-handler-visible' : 'bounded-ipc-ok');
+                } else {
+                  document.title = 'page-bridge-missing';
+                }
+                document.dispatchEvent(new CustomEvent('wry-ipc-message-v1',
+                  { detail: 'x'.repeat(70000) }));"#,
+            )
+            .expect("dispatch bounded IPC from page world after document load");
         let ipc_deadline = Instant::now() + Duration::from_secs(5);
         let first_ipc = loop {
             while gtk::events_pending() {
@@ -1700,7 +1778,11 @@ mod tests {
                 Err(mpsc::TryRecvError::Empty) if Instant::now() < ipc_deadline => {
                     std::thread::sleep(Duration::from_millis(10));
                 }
-                Err(error) => panic!("bounded isolated-world IPC did not arrive: {error}"),
+                Err(error) => panic!(
+                    "bounded isolated-world IPC did not arrive: {error}; page title={:?}, uri={:?}",
+                    persistent.webview().title(),
+                    persistent.webview().uri()
+                ),
             }
         };
         assert_eq!(first_ipc, "bounded-ipc-ok");

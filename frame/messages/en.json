@@ -2602,6 +2602,8 @@
   "connections_ready": "Ready",
   "connections_signed_out": "Not signed in · run",
   "connections_unknown": "Couldn’t check its sign-in",
+  "connections_cli_unavailable": "Unavailable in this build",
+  "connections_cli_unavailable_note": "Command-line connections aren’t available in this build. You can still use their websites.",
   "connections_missing": "Not installed",
   "connections_checking": "Checking…",
   "connections_servers_group": "Servers",

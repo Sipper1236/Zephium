@@ -15,6 +15,7 @@ fn profile_of(expected: &str) -> Result<ProfileId, WorkError> {
         .ok_or(WorkError::Invalid)
 }
 
+
 fn admitted(
     caller: &WebviewWindow,
     app: &tauri::AppHandle,
@@ -59,6 +60,7 @@ mod live {
             .into_iter()
             .map(|status| {
                 let (status_v1, account) = match (&status.path, &status.auth) {
+                    (_, cli::CliAuth::Unavailable) => (WorkCliStatusV1::Unavailable, None),
                     (None, _) => (WorkCliStatusV1::Missing, None),
                     (Some(_), cli::CliAuth::SignedIn(account)) => {
                         (WorkCliStatusV1::SignedIn, account.clone())
@@ -775,4 +777,17 @@ pub(crate) async fn work_sign_in_connection(
     }
     .await;
     result.unwrap_or_else(|error| check_failed(expected_profile, key, error))
+}
+
+#[cfg(all(test, feature = "work-product"))]
+mod tests {
+    #[tokio::test]
+    async fn closed_cli_broker_is_reported_as_unavailable_not_an_auth_failure() {
+        let rows = super::live::clis().await;
+        assert_eq!(rows.len(), 4);
+        for row in rows {
+            assert_eq!(serde_json::to_value(&row).unwrap()["status"], "unavailable");
+            assert!(row.account.is_none());
+        }
+    }
 }

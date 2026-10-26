@@ -277,7 +277,7 @@ impl Downloads {
                     .borrow_mut()
                     .insert(partition.profile(), preferences.clone());
                 done.finish(DownloadResponse::Preferences {
-                    site_downloads_require_confirmation: false,
+                    site_downloads_require_confirmation: cfg!(target_os = "linux"),
                     preferences,
                     supported: true,
                 });
@@ -318,7 +318,7 @@ impl Downloads {
                 if std::thread::Builder::new()
                     .name("zephium-download-file-check".into())
                     .spawn(move || {
-                        #[cfg(target_os = "macos")]
+                        #[cfg(any(target_os = "macos", target_os = "linux"))]
                         let result = verify_file(&path, &identity);
                         #[cfg(target_os = "windows")]
                         let result = if reveal {
@@ -433,7 +433,7 @@ impl Downloads {
                 .borrow_mut()
                 .insert(partition.profile(), preferences.clone());
             done.finish(DownloadResponse::Preferences {
-                site_downloads_require_confirmation: false,
+                site_downloads_require_confirmation: cfg!(target_os = "linux"),
                 preferences,
                 supported: true,
             });

@@ -703,7 +703,7 @@ impl EngineHost {
         );
         #[cfg(target_os = "macos")]
         let load_file_uploads = Rc::downgrade(&file_uploads);
-        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
         let download_surface_intent = Arc::new(AtomicBool::new(false));
         let guard_presentation_permit = presentation_permit.clone();
         let load_presentation_permit = presentation_permit.clone();
@@ -1520,6 +1520,31 @@ impl EngineHost {
             }
         }
 
+        #[cfg(target_os = "linux")]
+        if let Some(downloads) = &self.downloads {
+            use wry::WebViewBuilderExtUnix;
+            let downloads = Rc::downgrade(downloads);
+            let permit = event_permit.clone();
+            let intent = download_surface_intent.clone();
+            let navigation = navigation.clone();
+            builder = builder
+                .with_download_policy(DownloadPolicy::UseHandlers)
+                .with_native_download_handler(move |native| {
+                    if let Some(manager) = downloads.upgrade() {
+                        manager.admit(
+                            partition,
+                            permit.clone(),
+                            intent.clone(),
+                            navigation.clone(),
+                            native,
+                        );
+                    } else {
+                        use webkit2gtk::DownloadExt;
+                        native.cancel();
+                    }
+                });
+        }
+
         builder = match partition {
             Partition::Default(profile) | Partition::Persistent(profile) => {
                 #[cfg(target_os = "macos")]
@@ -2230,7 +2255,7 @@ impl EngineHost {
             content_styles: Arc::new(super::content_styles::DocumentStyleState::default()),
             #[cfg(target_os = "macos")]
             file_uploads,
-            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
             download_surface_intent,
             event_permit,
             navigation,

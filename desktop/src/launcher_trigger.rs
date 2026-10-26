@@ -2,11 +2,14 @@
 //! record, and on macOS an opt-in double tap of a modifier. Every good
 //! two-key combination is already claimed by some other tool, so the choice
 //! belongs to the person, and the settings page reports whether it holds.
+#[cfg(not(target_os = "linux"))]
 use std::str::FromStr;
+#[cfg(not(target_os = "linux"))]
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
+#[cfg(not(target_os = "linux"))]
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use zephium_core::ports::store::Store;
 
@@ -15,6 +18,7 @@ mod double_tap;
 
 pub const DEFAULT: &str = "CmdOrCtrl+Shift+Space";
 const SHORTCUT_KEY: &str = "launcher.shortcut";
+#[cfg(not(target_os = "linux"))]
 const DOUBLE_TAP_KEY: &str = "launcher.double-tap";
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -40,6 +44,8 @@ pub enum Rejection {
     /// Registration failed, usually because another application holds it.
     Unavailable,
     /// This platform's shortcut is managed elsewhere.
+    #[cfg_attr(target_os = "linux", allow(dead_code))]
+    // Keep the shared IPC rejection vocabulary.
     Unsupported,
 }
 
@@ -70,9 +76,11 @@ pub enum TriggerChange {
 }
 
 #[derive(Default)]
+#[cfg(not(target_os = "linux"))]
 pub struct Trigger(Mutex<State>);
 
 #[derive(Default)]
+#[cfg(not(target_os = "linux"))]
 struct State {
     shortcut: String,
     registered: Option<Shortcut>,
@@ -82,6 +90,7 @@ struct State {
 
 /// Checks a recorded accelerator before anything is unregistered, so a bad
 /// choice never costs the working one.
+#[cfg(not(target_os = "linux"))]
 pub fn validate(accelerator: &str) -> Result<Shortcut, Rejection> {
     if accelerator.is_empty() || accelerator.len() > 64 {
         return Err(Rejection::Invalid);
@@ -108,6 +117,7 @@ pub fn validate(accelerator: &str) -> Result<Shortcut, Rejection> {
     Ok(shortcut)
 }
 
+#[cfg(not(target_os = "linux"))]
 fn character(key: Code) -> bool {
     use Code::*;
     !matches!(
@@ -149,6 +159,7 @@ fn character(key: Code) -> bool {
     )
 }
 
+#[cfg(not(target_os = "linux"))]
 fn system(mods: Modifiers, key: Code) -> bool {
     let (cmd, ctrl, alt, shift) = (
         Modifiers::SUPER,
@@ -182,6 +193,7 @@ fn system(mods: Modifiers, key: Code) -> bool {
     }
 }
 
+#[cfg(not(target_os = "linux"))]
 fn register(app: &AppHandle, shortcut: &Shortcut) -> bool {
     let registered = app
         .global_shortcut()
@@ -196,6 +208,7 @@ fn register(app: &AppHandle, shortcut: &Shortcut) -> bool {
     registered.is_ok()
 }
 
+#[cfg(not(target_os = "linux"))]
 fn unregister(app: &AppHandle, shortcut: &Shortcut) {
     let _ = app.global_shortcut().unregister(*shortcut);
 }
@@ -215,6 +228,7 @@ fn persist(key: &str, value: &str) {
 
 /// Registers what was chosen last time, or the default. The keymap override
 /// is honoured for a profile that set one before there was a recorder.
+#[cfg(not(target_os = "linux"))]
 pub fn install(app: &AppHandle, keymap_override: Option<String>) {
     let shortcut = setting(SHORTCUT_KEY)
         .or(keymap_override)
@@ -238,6 +252,7 @@ pub fn install(app: &AppHandle, keymap_override: Option<String>) {
     double_tap::apply(app, double_tap);
 }
 
+#[cfg(not(target_os = "linux"))]
 pub fn snapshot(app: &AppHandle) -> LauncherTrigger {
     let (shortcut, registered, double_tap) = app.try_state::<Trigger>().map_or_else(
         || (DEFAULT.to_owned(), false, DoubleTap::Off),
@@ -271,14 +286,12 @@ pub fn snapshot(app: &AppHandle) -> LauncherTrigger {
     }
 }
 
+#[cfg(not(target_os = "linux"))]
 pub fn set_shortcut(app: &AppHandle, accelerator: &str) -> TriggerChange {
     let rejected = |reason| TriggerChange::Rejected {
         reason,
         trigger: snapshot(app),
     };
-    if cfg!(target_os = "linux") {
-        return rejected(Rejection::Unsupported);
-    }
     let shortcut = match validate(accelerator) {
         Ok(shortcut) => shortcut,
         Err(reason) => return rejected(reason),
@@ -317,6 +330,7 @@ pub fn set_shortcut(app: &AppHandle, accelerator: &str) -> TriggerChange {
 
 /// While a new shortcut is being recorded the current one must not fire, or
 /// pressing it to re-record would open the launcher instead.
+#[cfg(not(target_os = "linux"))]
 pub fn recording(app: &AppHandle, active: bool) {
     let Some(trigger) = app.try_state::<Trigger>() else {
         return;
@@ -350,6 +364,7 @@ pub fn recording(app: &AppHandle, active: bool) {
         .registered = restored;
 }
 
+#[cfg(not(target_os = "linux"))]
 pub fn set_double_tap(app: &AppHandle, mode: DoubleTap) -> LauncherTrigger {
     if let Some(trigger) = app.try_state::<Trigger>() {
         trigger
@@ -378,7 +393,174 @@ pub fn open_accessibility_settings() {
     double_tap::open_settings();
 }
 
-#[cfg(test)]
+// Linux registration belongs to LinuxGlobalShortcuts (portal on Wayland,
+// XGrabKey on X11), not the X11-only Tauri shortcut plugin.
+#[cfg(target_os = "linux")]
+pub fn snapshot(app: &AppHandle) -> LauncherTrigger {
+    let (shortcut, registered) = app
+        .try_state::<crate::linux_global_shortcuts::LinuxGlobalShortcuts>()
+        .map(|state| state.snapshot())
+        .unwrap_or((None, false));
+    let mut trigger = linux_snapshot(shortcut, registered);
+    trigger.editable = app
+        .try_state::<crate::linux_global_shortcuts::LinuxGlobalShortcuts>()
+        .is_some_and(|state| state.editable());
+    trigger
+}
+
+#[cfg(target_os = "linux")]
+fn linux_snapshot(
+    shortcut: Option<crate::linux_shortcut::LinuxLauncherShortcut>,
+    registered: bool,
+) -> LauncherTrigger {
+    LauncherTrigger {
+        shortcut: shortcut
+            .map(|shortcut| shortcut.accelerator())
+            .unwrap_or_default(),
+        default_shortcut: DEFAULT.into(),
+        registered: shortcut.is_some() && registered,
+        editable: false,
+        double_tap: DoubleTap::Off,
+        double_tap_supported: false,
+        accessibility: false,
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub fn set_double_tap(app: &AppHandle, _mode: DoubleTap) -> LauncherTrigger {
+    snapshot(app)
+}
+
+#[cfg(target_os = "linux")]
+pub fn set_shortcut(app: &AppHandle, accelerator: &str) -> TriggerChange {
+    let rejected = |reason| TriggerChange::Rejected {
+        reason,
+        trigger: snapshot(app),
+    };
+    let shortcut = match validate_linux(accelerator) {
+        Ok(shortcut) => shortcut,
+        Err(reason) => return rejected(reason),
+    };
+    let Some(state) = app.try_state::<crate::linux_global_shortcuts::LinuxGlobalShortcuts>() else {
+        return rejected(Rejection::Unavailable);
+    };
+    if !state.set_shortcut(shortcut, || {
+        if let Some(keymap) = app.try_state::<crate::keymap::Keymap>() {
+            keymap.window_table(Some(shortcut));
+            keymap.set_recording(false);
+        }
+        persist(SHORTCUT_KEY, &shortcut.accelerator());
+    }) {
+        return rejected(Rejection::Unavailable);
+    }
+    TriggerChange::Applied {
+        trigger: snapshot(app),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn validate_linux(
+    accelerator: &str,
+) -> Result<crate::linux_shortcut::LinuxLauncherShortcut, Rejection> {
+    use crate::linux_shortcut::{LinuxLauncherKey, LinuxLauncherShortcut};
+    if accelerator.is_empty() || accelerator.len() > 64 {
+        return Err(Rejection::Invalid);
+    }
+    if let Some(parsed) = zephium_core::accelerator::Accelerator::parse(
+        accelerator,
+        zephium_core::accelerator::Platform::Other,
+    ) {
+        if !parsed.ctrl && !parsed.alt && !parsed.meta {
+            return Err(Rejection::NeedsModifier);
+        }
+    }
+    let shortcut = LinuxLauncherShortcut::parse(accelerator).ok_or(Rejection::Invalid)?;
+    if shortcut.ctrl() && shortcut.alt() && matches!(shortcut.key(), LinuxLauncherKey::Function(_))
+    {
+        return Err(Rejection::System);
+    }
+    if shortcut.ctrl()
+        && !shortcut.alt()
+        && matches!(shortcut.key(), LinuxLauncherKey::AsciiAlphanumeric(_))
+    {
+        return Err(Rejection::AppCommand);
+    }
+    if shortcut.alt()
+        && !shortcut.ctrl()
+        && matches!(
+            shortcut.key(),
+            LinuxLauncherKey::Tab | LinuxLauncherKey::Space | LinuxLauncherKey::Function(4)
+        )
+    {
+        return Err(Rejection::System);
+    }
+    Ok(shortcut)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn stored_linux_shortcut() -> Option<String> {
+    setting(SHORTCUT_KEY).filter(|value| validate_linux(value).is_ok())
+}
+
+#[cfg(target_os = "linux")]
+pub fn recording(app: &AppHandle, active: bool) {
+    let update_focused = || {
+        if let Some(keymap) = app.try_state::<crate::keymap::Keymap>() {
+            keymap.set_recording(active);
+        }
+    };
+    if let Some(state) = app.try_state::<crate::linux_global_shortcuts::LinuxGlobalShortcuts>() {
+        state.recording(active, update_focused);
+    } else {
+        update_focused();
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod linux_tests {
+    use super::*;
+    use crate::linux_shortcut::LinuxLauncherShortcut;
+
+    #[test]
+    fn recorder_validation_preserves_system_and_application_commands() {
+        for value in [DEFAULT, "Ctrl+Shift+F5", "Ctrl+Alt+KeyK"] {
+            assert!(validate_linux(value).is_ok(), "{value}");
+        }
+        for value in ["Ctrl+KeyF", "Ctrl+Shift+KeyZ"] {
+            assert_eq!(validate_linux(value), Err(Rejection::AppCommand));
+        }
+        for value in [
+            "Alt+Tab",
+            "Alt+Shift+Tab",
+            "Alt+Space",
+            "Alt+F4",
+            "Ctrl+Alt+F1",
+            "Ctrl+Alt+F12",
+            "Ctrl+Alt+Shift+F5",
+        ] {
+            assert_eq!(validate_linux(value), Err(Rejection::System));
+        }
+        assert_eq!(validate_linux("Shift+F5"), Err(Rejection::NeedsModifier));
+        assert_eq!(validate_linux(""), Err(Rejection::Invalid));
+        assert_eq!(validate_linux("Ctrl+F13"), Err(Rejection::Invalid));
+    }
+
+    #[test]
+    fn linux_status_comes_from_the_native_registration_not_an_unmanaged_trigger() {
+        let chosen = LinuxLauncherShortcut::parse("Ctrl+Shift+F5");
+        let live = linux_snapshot(chosen, true);
+        assert_eq!(live.shortcut, "Ctrl+Shift+F5");
+        assert!(live.registered);
+        assert!(!live.editable);
+        assert_eq!(live.double_tap, DoubleTap::Off);
+        assert!(!linux_snapshot(chosen, false).registered);
+        let disabled = linux_snapshot(None, true);
+        assert!(disabled.shortcut.is_empty());
+        assert!(!disabled.registered);
+    }
+}
+
+#[cfg(all(test, not(target_os = "linux")))]
 mod tests {
     use super::*;
 
