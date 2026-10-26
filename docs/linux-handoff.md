@@ -239,6 +239,53 @@ Suggested community wording:
 > credentials and downloads, and I’d like to contribute them gradually with
 > clear tests and limitations.
 
+## Contribution preparation resumed, 26 October 2026
+
+The user asked to continue implementation, preserve the full work in a repo,
+and prepare small upstream PRs in order while asking before submitting each.
+This supersedes the earlier pause for future contribution work. It does not
+authorize opening the next PR yet.
+
+### Repository and branches
+
+- The personal fork already exists at
+  [Sipper1236/Zephium](https://github.com/Sipper1236/Zephium).
+- The complete local experimental port is now saved there as branch
+  `linux-experimental-workbench`, commit `243c3a2`. This is a preservation
+  branch, not a PR. It contains 81 changed files and is based on the older
+  local commit `0eaad6d79703ca53c1f77201f7a396dad47552ef`; upstream `main` is now
+  `2c4503c97bd58923ab990d952bd951d93e970ce7`. Do not submit this large branch
+  wholesale or assume it applies cleanly to current main.
+- Existing draft PR #221 remains open at
+  `https://github.com/zephium-browser/Zephium/pull/221` on
+  `feat/linux-platform-gating`, head `503dda32c1d31fe8833392c53b1c865768cbd0f0`.
+  It has not been updated or marked ready in this step.
+- Prepared local PR branch `fix/linux-webview-resize`, commit `cf73e3b`, based
+  directly on refreshed upstream `main`. It changes only
+  `desktop/src/platform/linux.rs`: immediately allocate the WebKit child to
+  match the fixed container, and extend the existing single-owner GTK native
+  test to check 1200×800 → 600×480 → 1400×900 → 720×520.
+- Prepared local PR branch `test/linux-startup-probes`, commit `6bf4402`, also
+  based on refreshed upstream `main`. It adds only
+  `scripts/ci/probe_linux_startup.py` and
+  `scripts/ci/test_probe_linux_startup.py`. The probe preserves an explicit
+  X11 authority path while using disposable profile directories.
+- These two preparation branches are local only. No PR was opened and no
+  branch was pushed for them. Ask before submitting each one.
+
+### Verification and next order
+
+No checks were run during this preparation. In particular, the final
+consolidated native GTK resize regression still needs qualification. Existing
+logs from the larger local port do not automatically qualify either focused
+branch, especially because the branches are based on a newer upstream commit.
+
+Proposed order is: existing draft #221, WebView resize fix, isolated startup
+probes, Arch recipe, then XDG Open at Login. The recipe depends on the platform
+gates and probe files because its check phase invokes them. Secret Service and
+downloads remain later, separate discussions. Before asking about submission,
+review the exact branch diff and run only the checks the user authorizes.
+
 ## Current state, 26 October 2026, 21:57 UTC
 
 This section supersedes the historical notes below. Keep Linux experimental

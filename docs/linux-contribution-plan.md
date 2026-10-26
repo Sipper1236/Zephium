@@ -10,19 +10,29 @@ The larger local port has additional tests and features, so its 377-test result
 must stay separate from the PR's results. The draft still needs desktop build,
 native startup and lint qualification before it can be considered ready.
 
-## Possible next steps
+## Preliminary contribution order
 
-Keep the requested order, adjusting each patch to its actual dependencies:
+The current public upstream base is `2c4503c97bd58923ab990d952bd951d93e970ce7`.
+Keep each contribution on its own branch. Ask before opening or publishing each
+PR. The order below reflects the existing draft and the new local preparation:
 
 | Step | Scope | Before submitting |
 | --- | --- | --- |
-| Startup probes | `scripts/ci/probe_linux_startup.py` and its tests. Preserve X11 authority when using a disposable HOME. | These are new files upstream. Describe this as adding isolated startup probes, rather than fixing an existing upstream probe. Keep credential tests with the credential adapter they require. |
-| Arch recipe | `packaging/arch/PKGBUILD`, desktop entry and packaging ignore rules. | Base it on the chosen upstream revision. The current recipe invokes the startup-probe tests, so those files need to land first or the check phase needs an appropriate independent scope. |
-| Open at Login | `desktop/src/login_item.rs` and `desktop/src/login_item/linux.rs`. | Explain XDG precedence, status readback and the user disable override. Keep engine and credential changes out of this patch. |
+| A: existing draft #221 | Experimental platform gates and shared engine fixes. | Recheck against current `main`, then ask before marking ready or otherwise submitting it. |
+| B: WebView resize | `desktop/src/platform/linux.rs`; direct child allocation plus shrink/grow regression in the existing GTK native test. | Local branch `fix/linux-webview-resize`, commit `cf73e3b`. The consolidated native fixture has not been rerun. |
+| C: startup probes | `scripts/ci/probe_linux_startup.py` and its tests. Preserve X11 authority when using a disposable HOME. | Local branch `test/linux-startup-probes`, commit `6bf4402`. These are new files upstream. Describe this as adding isolated startup probes, not fixing an existing probe. |
+| D: Arch recipe | `packaging/arch/PKGBUILD`, desktop entry and packaging ignore rules. | Depends on the platform gate and startup probe files because the recipe's check phase invokes them. Set version and release against the chosen upstream base. |
+| E: Open at Login | `desktop/src/login_item.rs` and `desktop/src/login_item/linux.rs`. | Explain XDG precedence, status readback and the user disable override. Keep engine and credential changes out of this patch. |
 
 The Secret Service adapter and native downloads can follow as separate
 discussions and PRs. Downloads touch the shared coordinator and vendored Wry,
 so agree on that scope before asking the maintainer to review the implementation.
+
+The complete experimental port is preserved in the personal fork branch
+`Sipper1236/Zephium:linux-experimental-workbench` for reference. It is based on
+the earlier local base `0eaad6d79703ca53c1f77201f7a396dad47552ef`, contains many
+unqualified changes, and is not a submission branch. Do not open it as a PR or
+merge it wholesale. The small PR branches above use the refreshed upstream base.
 
 ## Details to get right in future descriptions
 
