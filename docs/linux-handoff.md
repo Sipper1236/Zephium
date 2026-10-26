@@ -256,10 +256,16 @@ authorize opening the next PR yet.
   local commit `0eaad6d79703ca53c1f77201f7a396dad47552ef`; upstream `main` is now
   `2c4503c97bd58923ab990d952bd951d93e970ce7`. Do not submit this large branch
   wholesale or assume it applies cleanly to current main.
-- Existing draft PR #221 remains open at
+- Existing draft PR #221 is refreshed at
   `https://github.com/zephium-browser/Zephium/pull/221` on
-  `feat/linux-platform-gating`, head `503dda32c1d31fe8833392c53b1c865768cbd0f0`.
-  It has not been updated or marked ready in this step.
+  `feat/linux-platform-gating`, head `5c8361fc`. It remains a draft; it was not
+  marked ready or submitted for review.
+- The branch was rebased on current upstream `main` at
+  `2c4503c97bd58923ab990d952bd951d93e970ce7`. A local backup of its prior head
+  remains at `backup/pr221-pre-refresh` (`503dda32`).
+- The refreshed PR now changes 13 files, with 325 additions and 48 removals.
+  It also gates Linux launcher shortcut editing as unsupported and keeps the
+  native Ask page reader unavailable, rather than enabling unsupported paths.
 - Prepared local PR branch `fix/linux-webview-resize`, commit `cf73e3b`, based
   directly on refreshed upstream `main`. It changes only
   `desktop/src/platform/linux.rs`: immediately allocate the WebKit child to
@@ -275,10 +281,25 @@ authorize opening the next PR yet.
 
 ### Verification and next order
 
-No checks were run during this preparation. In particular, the final
-consolidated native GTK resize regression still needs qualification. Existing
-logs from the larger local port do not automatically qualify either focused
-branch, especially because the branches are based on a newer upstream commit.
+Checks on refreshed #221:
+
+- Platform guard tests: 4 passed.
+- Linux engine suite with `agentic-browser`: 387 passed, 0 failed, 4 ignored.
+- `cargo fmt --all -- --check` and `git diff --check` passed.
+- `cargo check -p zephium-desktop --lib --locked` passed with 106 non-fatal
+  warnings, primarily deprecations and dead code in feature-gated paths.
+- The default desktop check first exposed that Work composition and the Ask
+  native reader were not Linux-ready, and that the Tauri shortcut plugin is
+  absent on Linux. The PR now gates those paths and reports unsupported
+  shortcut editing / unavailable Ask commands honestly.
+- A linked desktop binary and live X11/Wayland startup were not qualified.
+  Only 1.4 GiB remained on `/home` after the shared-target checks, so the larger
+  link and startup probe were deferred rather than risking a full filesystem.
+
+The two focused follow-up branches remain unverified during this preparation.
+The consolidated native GTK resize regression still needs qualification.
+Existing logs from the larger local port do not automatically qualify either
+focused branch, especially because they are based on newer upstream main.
 
 Proposed order is: existing draft #221, WebView resize fix, isolated startup
 probes, Arch recipe, then XDG Open at Login. The recipe depends on the platform
@@ -352,19 +373,15 @@ artifacts do not identify the final package above.
 [PR #221](https://github.com/zephium-browser/Zephium/pull/221) remains a draft.
 CodeRabbit explicitly skipped review because the PR is a draft; there are no
 human reviews. Its successful status is not a completed code review.
-For head `503dda32`, both upstream workflow runs report `action_required`,
+Historical status at 21:57 UTC: for head `503dda32`, both upstream workflow runs reported `action_required`,
 not a passing CI result: [CI](https://github.com/zephium-browser/Zephium/actions/runs/40396579119)
 and [Components](https://github.com/zephium-browser/Zephium/actions/runs/40396578795).
 Its branch is `feat/linux-platform-gating` in `Sipper1236/Zephium`, with local
 worktree `/home/rayyan/Zephium-prs/platform-gating`.
 
-- Pushed follow-up commit: `503dda32c1d31fe8833392c53b1c865768cbd0f0`.
-- Scope now totals 10 files, 197 additions and 36 deletions.
-- The five initial engine failures are resolved: **359 passed, 0 failed,
-  4 ignored** with pinned Rust 1.95.0 (`target/linux-handoff/pr-engine.log`).
-- The PR description was updated with these results and still leaves native
-  desktop qualification and workspace Clippy pending. The updated body is
-  retained in `target/linux-handoff/pr-body-update.md`.
+- This historical snapshot records the old head `503dda32c1d31fe8833392c53b1c865768cbd0f0`.
+- The refreshed PR head is `5c8361fc`; its current results and remaining
+  qualifications are recorded in “Contribution preparation resumed” above.
 - Packaging, credentials, downloads, autostart and the later full-port lint
   cleanup remain outside this PR. Full-port checks do not qualify the PR branch.
 

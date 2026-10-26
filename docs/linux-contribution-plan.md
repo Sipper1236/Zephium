@@ -4,11 +4,11 @@ Only [draft PR #221](https://github.com/zephium-browser/Zephium/pull/221) is ope
 Further submissions need the user's go-ahead. Keep each PR focused on one
 change and describe the behavior and evidence on that branch.
 
-The first draft allows experimental source builds and fixes the shared engine
-checks needed for Linux. Its engine suite passes 359 tests with Rust 1.95.0.
-The larger local port has additional tests and features, so its 377-test result
-must stay separate from the PR's results. The draft still needs desktop build,
-native startup and lint qualification before it can be considered ready.
+The refreshed draft allows experimental Linux source builds and keeps native
+features without Linux implementations unavailable. Its refreshed engine suite
+passes 387 tests with Rust 1.95.0. The larger local port has additional tests
+and features, so its 377-test result must stay separate from the PR's results.
+The draft still needs a linked desktop build and native startup qualification.
 
 ## Preliminary contribution order
 
@@ -18,7 +18,7 @@ PR. The order below reflects the existing draft and the new local preparation:
 
 | Step | Scope | Before submitting |
 | --- | --- | --- |
-| A: existing draft #221 | Experimental platform gates and shared engine fixes. | Recheck against current `main`, then ask before marking ready or otherwise submitting it. |
+| A: existing draft #221 | Experimental platform gates, Linux feature guards and shared engine fixes. | Refreshed to current `main`, head `5c8361fc`. Engine, platform-guard, format and desktop compile checks pass. Keep it draft until a linked build and native startup are qualified; ask before marking ready. |
 | B: WebView resize | `desktop/src/platform/linux.rs`; direct child allocation plus shrink/grow regression in the existing GTK native test. | Local branch `fix/linux-webview-resize`, commit `cf73e3b`. The consolidated native fixture has not been rerun. |
 | C: startup probes | `scripts/ci/probe_linux_startup.py` and its tests. Preserve X11 authority when using a disposable HOME. | Local branch `test/linux-startup-probes`, commit `6bf4402`. These are new files upstream. Describe this as adding isolated startup probes, not fixing an existing probe. |
 | D: Arch recipe | `packaging/arch/PKGBUILD`, desktop entry and packaging ignore rules. | Depends on the platform gate and startup probe files because the recipe's check phase invokes them. Set version and release against the chosen upstream base. |
