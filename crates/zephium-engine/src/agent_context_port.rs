@@ -13,17 +13,16 @@ use zephium_agentic::{
     AgentBrowserPort, ContextCancellationSettlement, ContextConstructionSettlement,
     ContextCookieTransferFailure, ContextCookieTransferOutcome, ContextCookieTransferRequest,
     ContextCookieTransferSettlement, ContextDispatch, ContextNativeEvent, ContextNativeRequest,
-    ContextNativeResourceSnapshot, ContextPortFailure, ContextResourceAuditId,
-    ContextResourceAuditSettlement, ContextShutdownAuditSettlement, ContextShutdownDispatch,
-    SemanticActionNativeCompletion, SemanticActionNativeRequest, SemanticRuntimeCorrelation,
-    SemanticRuntimeInvocation, SemanticRuntimePortFailure, SemanticRuntimeSettlement,
-    SemanticScreenshotNativeCompletion, SemanticScreenshotNativeRequest,
+    ContextNativeResourceSnapshot, ContextOperationKind, ContextPortFailure,
+    ContextResourceAuditId, ContextResourceAuditSettlement, ContextShutdownAuditSettlement,
+    ContextShutdownDispatch, SemanticActionNativeCompletion, SemanticActionNativeRequest,
+    SemanticRuntimeCorrelation, SemanticRuntimeInvocation, SemanticRuntimePortFailure,
+    SemanticRuntimeSettlement, SemanticScreenshotNativeCompletion, SemanticScreenshotNativeRequest,
     MAX_PENDING_NATIVE_CONTEXT_TASKS, MAX_PENDING_SEMANTIC_SCREENSHOTS,
 };
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use zephium_agentic::{
-    ContextJoin, ContextNavigationReplacement, ContextNavigationTarget, ContextOperationKind,
-    ContextRendererLoss,
+    ContextJoin, ContextNavigationReplacement, ContextNavigationTarget, ContextRendererLoss,
 };
 #[cfg(target_os = "macos")]
 use zephium_agentic::{SemanticScreenshotNativeCapture, SemanticScreenshotNativeFailure};
@@ -1644,6 +1643,7 @@ impl EngineAgentBrowserPort {
 }
 
 impl AgentBrowserPort for EngineAgentBrowserPort {
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     fn work_screenshot_public_candidate(
         &self,
         lease: &zephium_agentic::WorkBrowserExecutionLease,
@@ -1652,6 +1652,7 @@ impl AgentBrowserPort for EngineAgentBrowserPort {
         self.native_image_public_candidate(lease, context)
     }
 
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     fn claim_work_screenshot_source(
         &self,
         lease: &zephium_agentic::WorkBrowserExecutionLease,
