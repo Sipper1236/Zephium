@@ -22,6 +22,7 @@ pub(crate) fn model_fault(error: WorkModelError, hosted: bool) -> PageAssistFaul
         WorkModelError::Unauthorized => WorkModelFaultV1::KeyRefused,
         WorkModelError::OverBudget if hosted => WorkModelFaultV1::HostedUsage,
         WorkModelError::OverBudget => WorkModelFaultV1::ProviderCredit,
+        WorkModelError::PlanLimit => WorkModelFaultV1::PlanLimit,
         WorkModelError::Hosted { refusal, .. } => match refusal {
             HostedRefusal::PlanRequired => WorkModelFaultV1::PlanRequired,
             HostedRefusal::BillingReview => WorkModelFaultV1::BillingReview,

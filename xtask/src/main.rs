@@ -212,6 +212,7 @@ fn check_security_fork_locks() {
     ];
     const ROOT_FORKS: &[(&str, &str)] = &[
         ("adblock", "0.13.2"),
+        ("tao", "0.35.3"),
         ("tauri", "2.11.3"),
         ("tauri-runtime-wry", "2.11.3"),
         ("wry", "0.55.1"),

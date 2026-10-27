@@ -1,5 +1,45 @@
 # Linux/Arch port handoff
 
+## Active integration branch, 27 October 2026
+
+Continue active work from `/home/rayyan/Zephium-prs/linux-integration`, branch
+`linux-integration`. The old full-port checkout at `/home/rayyan/Zephium` and
+its preserved fork branch remain available as historical snapshots. They have
+not been reset or replaced. The shared Cargo target and evidence directory
+remain `/home/rayyan/Zephium/target` and `target/linux-handoff/` under that
+original checkout.
+
+The integration merges upstream `34539723` into the preserved experimental port.
+The upstream fetch advanced beyond the earlier #221 base at `2c4503c9`.
+Five merge conflicts were resolved without enabling absent Linux adapters:
+the new macOS/Windows HTTP-authentication and certificate owners remain guarded,
+and Linux download presentation/profile-erasure ownership remains connected.
+Upstream's new download pause bookkeeping is initialized on Linux. Pause and
+resume return `Unsupported` before changing or stopping a transfer because
+WebKitGTK exposes no retained resume operation.
+
+Current integration checks: locked default desktop library check passed;
+engine `agentic-browser` suite **410 passed, 0 failed, 6 ignored**; frontend type
+checking and Rust formatting passed. Logs are `integration-check.*`,
+`integration-engine-*`, `integration-frame-typecheck.*` and `integration-format.*`
+in the original evidence directory. The older 970-test frontend result below
+does not cover the newly merged upstream frontend changes.
+
+The native test harness first encountered a teardown race in Mesa's disposable
+shader cache. Disabling that unused disk cache in the native-only runner made
+the complete #221 X11 harness pass with **2 tests**, exit 0. #221's modifier test
+also required a pure mask-filter seam so it could run without GTK initialization.
+Its corrected commit is `561888db`; the exact desktop suite passed **260 tests**,
+with **2 ignored**. The existing draft has been updated and remains a draft.
+The resize follow-up is now `d7d4b2cb` on top of that commit and retains a one-file,
+44-line diff. Its final test build is running; no new PR has been opened.
+
+Next: finish merge qualification, hide unsupported pause/resume actions using
+native capability readback, qualify the native resize and download fixtures on
+both displays, run current desktop/frontend suites and relevant strict lint and
+boundary checks, then build and validate a fresh package from this integration
+branch. No new full-port production package has been built in this resumed run.
+
 ## Resumed port work, 27 October 2026, 02:08 UTC
 
 The user asked to resume the port and continue until it is complete. This

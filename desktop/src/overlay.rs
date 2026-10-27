@@ -74,7 +74,7 @@ impl State {
 pub struct Overlay {
     window: WebviewWindow,
     state: Arc<Mutex<State>>,
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     recovery_document: Option<tauri::Url>,
 }
 impl Overlay {
@@ -98,7 +98,7 @@ impl Overlay {
         }
         let this = Self {
             window,
-            #[cfg(target_os = "windows")]
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
             recovery_document: pending_document.clone(),
             state: Arc::new(Mutex::new(State {
                 model,
@@ -177,7 +177,7 @@ impl Overlay {
         self.on_main(|this| this.present());
         self.snapshot()
     }
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     pub(crate) fn prepare_recovery(&self) -> Option<tauri::Url> {
         let document = self.recovery_document.clone()?;
         {
@@ -860,32 +860,55 @@ pub fn request(app: &tauri::AppHandle, action: impl FnOnce(&Overlay) + Send + 's
             let Some(build) = build else {
                 return;
             };
-            if let Err(error) = build() {
-                factory
-                    .0
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .queued
-                    .clear();
-                crate::request_startup_failure(
-                    &handle,
-                    format_args!("launcher construction failed: {error}"),
-                );
-                return;
-            }
-            let queued =
-                std::mem::take(&mut factory.0.lock().unwrap_or_else(|e| e.into_inner()).queued);
-            if let Some(panel) = handle.try_state::<Overlay>() {
-                for action in queued {
-                    if crate::shutdown_started(&handle) {
-                        break;
-                    }
-                    action(&panel);
-                }
-            }
+            // A request can arrive inside a webview IPC callback, where
+            // run_on_main_thread runs inline and WebView2 cannot finish creating
+            // another webview (#128). Post the build to a later event-loop turn.
+            let deferred = handle.clone();
+            tauri::async_runtime::spawn(async move {
+                let target = deferred.clone();
+                let _ = deferred.run_on_main_thread(move || construct(&target, build));
+            });
         }
     })
     .is_ok()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn construct(handle: &tauri::AppHandle, build: BuildPanel) {
+    let Some(factory) = handle.try_state::<Factory>() else {
+        return;
+    };
+    if crate::shutdown_started(handle) {
+        factory
+            .0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .queued
+            .clear();
+        return;
+    }
+    if let Err(error) = build() {
+        factory
+            .0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .queued
+            .clear();
+        crate::request_startup_failure(
+            handle,
+            format_args!("launcher construction failed: {error}"),
+        );
+        return;
+    }
+    let queued = std::mem::take(&mut factory.0.lock().unwrap_or_else(|e| e.into_inner()).queued);
+    if let Some(panel) = handle.try_state::<Overlay>() {
+        for action in queued {
+            if crate::shutdown_started(handle) {
+                break;
+            }
+            action(&panel);
+        }
+    }
 }
 
 #[cfg(test)]

@@ -884,7 +884,7 @@ impl super::EngineHost {
                 .views
                 .get(&tab)
                 .ok_or(ExtensionActionRejection::TabDiscarded)?;
-            let window = native::window_id(&view.webview())
+            let window = extension_window(view)
                 .map_err(|_| ExtensionActionRejection::NativeAdmissionFailed)?;
             let mut states = Vec::new();
             for ((owner, _), install) in &self.windows_extensions.installs {
@@ -1270,7 +1270,7 @@ impl super::EngineHost {
             .views
             .get(&request.tab())
             .ok_or(ExtensionActionRejection::TabDiscarded)?;
-        if native::window_id(&view.webview()).ok() != Some(window_id) {
+        if extension_window(view).ok() != Some(window_id) {
             return Err(ExtensionActionRejection::TabUnavailable);
         }
         let resource = self
@@ -1473,3 +1473,12 @@ mod tests {
 #[cfg(test)]
 #[path = "webext_windows_qualification.rs"]
 mod qualification;
+
+fn extension_window(view: &super::ObservedView) -> Result<i64, String> {
+    if let Some(window) = view.extension_window.get() {
+        return Ok(window);
+    }
+    let window = native::window_id(&view.webview())?;
+    view.extension_window.set(Some(window));
+    Ok(window)
+}

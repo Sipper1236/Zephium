@@ -325,7 +325,9 @@ const fn failure_for(error: WorkModelError) -> AgentProviderFailure {
         WorkModelError::Network => AgentProviderFailureClass::Transport,
         WorkModelError::Protocol => AgentProviderFailureClass::Protocol,
         WorkModelError::Cancelled => AgentProviderFailureClass::Cancelled,
-        WorkModelError::OverBudget => AgentProviderFailureClass::Provider,
+        WorkModelError::OverBudget | WorkModelError::PlanLimit => {
+            AgentProviderFailureClass::Provider
+        }
         WorkModelError::Hosted { refusal, .. } => match refusal {
             HostedRefusal::PlanRequired | HostedRefusal::BillingReview => {
                 AgentProviderFailureClass::Permission

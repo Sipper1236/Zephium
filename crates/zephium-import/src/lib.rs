@@ -294,7 +294,8 @@ pub fn essentials(
 }
 
 /// Caps a tree's size and depth: folders past the depth limit are opened
-/// into their parent, and reading stops at the node budget.
+/// into their parent, and reading stops at the node budget. Only links
+/// Zephium would open are kept, so what is counted is what can be added.
 fn bound(nodes: Vec<ImportNode>, depth: usize, budget: &mut usize) -> Vec<ImportNode> {
     let mut kept = Vec::new();
     for node in nodes {
@@ -310,6 +311,7 @@ fn bound(nodes: Vec<ImportNode>, depth: usize, budget: &mut usize) -> Vec<Import
                 }
             }
             ImportNode::Folder { children, .. } => kept.extend(bound(children, depth, budget)),
+            ImportNode::Link { ref url, .. } if !zephium_core::navigation::is_allowed_str(url) => {}
             link => {
                 *budget -= 1;
                 kept.push(link);
@@ -364,6 +366,40 @@ mod tests {
         }
         assert_eq!(depth, MAX_TREE_DEPTH);
         assert_eq!(node, &link("https://deep.example/"));
+    }
+
+    #[test]
+    fn bounding_keeps_only_links_that_can_be_opened() {
+        let mut budget = MAX_NODES;
+        let bounded = bound(
+            vec![
+                link("https://ok.example/"),
+                link("javascript:alert(1)"),
+                link("chrome://settings/"),
+                link("file:///C:/notes.txt"),
+                link("https://user:secret@example.com/"),
+                ImportNode::Folder {
+                    title: "Internal".into(),
+                    children: vec![link("edge://favorites/"), link("about:config")],
+                },
+                ImportNode::Folder {
+                    title: "Mixed".into(),
+                    children: vec![link("chrome://flags/"), link("http://also-ok.example/")],
+                },
+            ],
+            0,
+            &mut budget,
+        );
+        assert_eq!(
+            bounded,
+            vec![
+                link("https://ok.example/"),
+                ImportNode::Folder {
+                    title: "Mixed".into(),
+                    children: vec![link("http://also-ok.example/")]
+                }
+            ]
+        );
     }
 
     #[test]

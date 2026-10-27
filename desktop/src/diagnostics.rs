@@ -2,15 +2,16 @@
 //! process aborts, and showing that folder to the person. Nothing here sends
 //! anything anywhere; a report leaves the device only if someone attaches it.
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::OnceLock;
+use std::time::{Duration, Instant};
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 const CRASH_REPORT: &str = "last-crash.txt";
 
 static LOG_DIR: OnceLock<PathBuf> = OnceLock::new();
+static STARTED: OnceLock<Instant> = OnceLock::new();
 
 /// Records the log folder and installs the crash hook. With `panic = "abort"`
 /// the default hook's message goes to a stderr nobody may be reading, or into
@@ -21,6 +22,7 @@ pub(crate) fn install(dir: PathBuf) {
     if LOG_DIR.set(dir).is_err() {
         return;
     }
+    let _ = STARTED.set(Instant::now());
     std::panic::set_hook(Box::new(|info| {
         let location = info
             .location()
@@ -42,6 +44,16 @@ pub(crate) fn install(dir: PathBuf) {
             let _ = write_private(&dir.join(CRASH_REPORT), report.as_bytes());
         }
     }));
+}
+
+/// The folder holding the log and the crash report, once the log is set up.
+pub(crate) fn log_dir() -> Option<&'static Path> {
+    LOG_DIR.get().map(PathBuf::as_path)
+}
+
+/// How long this run has been going, once the log is set up.
+pub(crate) fn uptime() -> Option<Duration> {
+    STARTED.get().map(Instant::elapsed)
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]

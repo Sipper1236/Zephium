@@ -95,6 +95,16 @@ pub(super) fn open(path: &std::path::Path) -> Result<(), DownloadError> {
 }
 
 impl Downloads {
+    pub(super) fn user_pause(
+        self: &Rc<Self>,
+        _partition: Partition,
+        _id: DownloadId,
+    ) -> Result<(), DownloadError> {
+        // Cancelling a WebKitGTK download provides no retained resume state.
+        // Refuse pause before changing or stopping the active transfer.
+        Err(DownloadError::Unsupported)
+    }
+
     pub(super) fn resume(
         &self,
         _partition: Partition,
@@ -227,6 +237,8 @@ impl Downloads {
                 authorized: false,
                 cancelling: false,
                 persisting_terminal: false,
+                kept: false,
+                user_pausing: false,
                 deadline: DecisionDeadline::new(DecisionPhase::Admission, Instant::now()),
             },
         );

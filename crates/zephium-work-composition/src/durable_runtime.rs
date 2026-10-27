@@ -175,7 +175,11 @@ impl ReadFailureTrace {
             zephium_app::work_trace::record(format_args!(
                 "work: phase=page event=browser_failure cause={failure:?}{} state={:?} calls={} actions={} snapshots={} inspection_refusals={} navigation_refusals={} action_refusals={} last_action_refusal={:?} last_tool={:?} content=redacted",
                 if matches!(format!("{failure:?}").as_str(), "Contract" | "Browser(Continuation)") {
-                    format!(" site={}", zephium_agent_controller::last_contract_site())
+                    format!(
+                        " site={} persistence={:?}",
+                        zephium_agent_controller::last_contract_site(),
+                        snapshot.persistence_failure
+                    )
                 } else if format!("{failure:?}") == "Native(TimedOut)" {
                     format!(" timeout_stage={}", zephium_engine::last_action_timeout_stage())
                 } else {

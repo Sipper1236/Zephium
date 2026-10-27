@@ -14,14 +14,16 @@ decides whether it is ready for review.
 
 ## Preliminary contribution order
 
-The current public upstream base is `2c4503c97bd58923ab990d952bd951d93e970ce7`.
+The last fetched upstream revision is `34539723`; #221's tested base remains
+`2c4503c97bd58923ab990d952bd951d93e970ce7`. The full port is being qualified on
+top of the newer revision in the separate `linux-integration` worktree.
 Keep each contribution on its own branch. Ask before opening or publishing each
 PR. The order below reflects the existing draft and the new local preparation:
 
 | Step | Scope | Before submitting |
 | --- | --- | --- |
-| A: existing draft #221 | Experimental platform gates, Linux feature guards and shared engine fixes. | Refreshed to current `main`, head `5c8361fc`. Engine, platform-guard, format and desktop compile checks pass. Linked production build passed; X11 and 1024×640 Wayland startup probes passed. Ask before marking ready. |
-| B: WebView resize | `desktop/src/platform/linux.rs`; direct child allocation plus shrink/grow regression in the existing GTK native test. | Local branch `fix/linux-webview-resize`, rebased onto #221 at `299eff37`. Native test compilation is in progress; qualify this branch's consolidated fixture on both displays before proposing it. |
+| A: existing draft #221 | Experimental platform gates, Linux feature guards and shared engine fixes. | Head `561888db` fixes the GTK-dependent unit fixture: desktop 260 passed, 2 ignored; full native X11 harness 2 passed. Engine and platform checks pass. Earlier linked production build and X11/small-Wayland startup probes passed. Ask before marking ready. |
+| B: WebView resize | `desktop/src/platform/linux.rs`; direct child allocation plus shrink/grow regression in the existing GTK native test. | Local branch `fix/linux-webview-resize`, rebased onto #221 at `d7d4b2cb`. Final native test compilation is in progress; qualify this branch's consolidated fixture on both displays before proposing it. |
 | C: startup probes | `scripts/ci/probe_linux_startup.py` and its tests. Preserve X11 authority when using a disposable HOME. | Local branch `test/linux-startup-probes`, commit `6bf4402`. These are new files upstream. Describe this as adding isolated startup probes, not fixing an existing probe. |
 | D: Arch recipe | `packaging/arch/PKGBUILD`, desktop entry and packaging ignore rules. | Depends on the platform gate and startup probe files because the recipe's check phase invokes them. Set version and release against the chosen upstream base. |
 | E: Open at Login | `desktop/src/login_item.rs` and `desktop/src/login_item/linux.rs`. | Explain XDG precedence, status readback and the user disable override. Keep engine and credential changes out of this patch. |

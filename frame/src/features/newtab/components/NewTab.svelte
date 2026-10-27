@@ -17,6 +17,7 @@
   import IconButton from "$shared/ui/IconButton";
   import { greetingFor } from "../lib/greeting";
   import { clockFace, clockFormat, dayKey, focusSpan, untilNextMinute } from "../lib/clock";
+  import { readSystemClock, systemHour24 } from "../lib/system-clock.svelte";
   import { focus, localDay } from "$domain/time";
   import { groundPath, notchShape, notchWidth } from "../lib/ground";
   import { layout, type Box } from "../lib/layout";
@@ -72,7 +73,17 @@
     const named = !incognito && preferences.value("ui.newtab-name") === "true" && firstName;
     return named ? m.ntp_greeting_named({ greeting: words, name: firstName }) : words;
   });
-  let face = $derived(clockFace(now, clockFormat(preferences.value("ui.newtab-clock-format"))));
+  let clockSetting = $derived(clockFormat(preferences.value("ui.newtab-clock-format")));
+  let face = $derived(clockFace(now, clockSetting, undefined, systemHour24()));
+  // The system's own setting is read when the page opens and when the window
+  // comes back, which is where a change made in System Settings arrives.
+  $effect(() => {
+    if (!showClock || clockSetting !== "system") return;
+    void readSystemClock();
+    const reread = () => void readSystemClock();
+    window.addEventListener("focus", reread);
+    return () => window.removeEventListener("focus", reread);
+  });
   let date = $derived(
     new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric" }).format(
       now,

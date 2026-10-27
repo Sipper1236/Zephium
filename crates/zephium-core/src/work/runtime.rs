@@ -1677,6 +1677,8 @@ pub enum WorkModelFaultV1 {
     KeyRefused,
     /// The person's own provider account is out of credit.
     ProviderCredit,
+    /// The provider plan's per-minute limit is smaller than one request.
+    PlanLimit,
     /// The account's included Zephium AI usage, and any extra, is spent.
     HostedUsage,
     /// The chosen Zephium AI model needs another plan.

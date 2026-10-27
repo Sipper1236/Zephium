@@ -239,6 +239,9 @@ pub enum WorkModelError {
     Cancelled,
     /// The person's own provider account is out of credit.
     OverBudget,
+    /// One request is larger than the provider plan allows per minute, so
+    /// waiting cannot help.
+    PlanLimit,
     /// Zephium Cloud's own refusal. `retry_after_ms` is the server's word on
     /// when to ask again, never a guess.
     Hosted {

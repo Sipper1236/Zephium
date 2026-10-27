@@ -138,7 +138,7 @@ type PlacementFailureCallback = Rc<dyn Fn(ItemId, Arc<AtomicBool>)>;
 
 struct State {
     fullscreen_transition: Option<super::fullscreen_transition::FullscreenTransition>,
-    fullscreen_restore: Option<RECT>,
+    fullscreen_restore: Option<crate::fullscreen::ScreenRect>,
     parent: HWND,
     gap: f64,
     origin: (f64, f64),
@@ -524,12 +524,8 @@ impl Stage {
         };
         drop(state);
         if id.is_some() && previous.is_none() {
-            let mut rect = RECT::default();
-            if unsafe { windows::Win32::UI::WindowsAndMessaging::GetWindowRect(parent, &mut rect) }
-                .is_ok()
-            {
-                self.state.borrow_mut().fullscreen_restore = Some(rect);
-            }
+            self.state.borrow_mut().fullscreen_restore =
+                super::fullscreen_transition::client_rect(parent);
         }
         let transition = super::fullscreen_transition::FullscreenTransition::new(
             parent,

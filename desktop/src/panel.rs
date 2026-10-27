@@ -18,8 +18,9 @@ use objc2_app_kit::{
     NSApplicationActivationOptions, NSColor, NSRunningApplication, NSWindow,
     NSWindowAnimationBehavior, NSWindowCollectionBehavior, NSWorkspace,
 };
-use objc2_foundation::{MainThreadMarker, NSRect};
+use objc2_foundation::{MainThreadMarker, NSProcessInfo, NSRect};
 use objc2_quartz_core::CAMediaTimingFunction;
+use objc2_web_kit::WKWebView;
 use tauri::WebviewWindow;
 
 thread_local! {
@@ -114,10 +115,46 @@ pub fn layout(layout: &zephium_ipc::PanelLayout, animate: bool) {
     }
 }
 
+/// Activation on macOS 14 and later is cooperative: `activate` asks, and the
+/// system grants it when the user's own action (the launcher's shortcut) led
+/// here. `activateIgnoringOtherApps` is only a deprecated hint there.
+fn activate(app: &NSApplication) {
+    if NSProcessInfo::processInfo()
+        .operatingSystemVersion()
+        .majorVersion
+        >= 14
+    {
+        app.activate();
+    } else {
+        #[allow(deprecated)]
+        app.activateIgnoringOtherApps(true);
+    }
+}
+
+/// Makes the launcher's page the first responder, so typing and Escape reach
+/// it the moment the window is key. The content view is wry's parent view,
+/// which refuses first responder and would leave the page without the keys
+/// until it was clicked.
+fn focus_page(window: &WebviewWindow) {
+    let _ = window.with_webview(|webview| {
+        if MainThreadMarker::new().is_none() {
+            return;
+        }
+        // SAFETY: Tauri supplies a live WKWebView pointer for the duration of
+        // this main-thread callback.
+        let page: &WKWebView = unsafe { &*webview.inner().cast() };
+        if let Some(window) = page.window() {
+            window.makeFirstResponder(Some(page));
+        }
+    });
+}
+
 /// Takes the keyboard from whichever application is frontmost. The launcher
 /// is made main as well as key before activating, because activation brings
 /// the app's main window forward too, and that must be the launcher rather
-/// than a browser window sitting behind the user's current app.
+/// than a browser window sitting behind the user's current app. The page is
+/// given the keyboard once, on entering; a repeat presentation of a launcher
+/// already up leaves wherever focus has moved to alone.
 pub fn show(window: &WebviewWindow) {
     let Some(main) = MainThreadMarker::new() else {
         return;
@@ -139,9 +176,6 @@ pub fn show(window: &WebviewWindow) {
         if entering && !window.isVisible() {
             window.setAlphaValue(0.0);
         }
-        if let Some(view) = window.contentView() {
-            window.makeFirstResponder(Some(&view));
-        }
         window.orderFrontRegardless();
         window.makeKeyWindow();
         window.makeMainWindow();
@@ -159,9 +193,11 @@ pub fn show(window: &WebviewWindow) {
             );
         }
     });
+    if entering {
+        focus_page(window);
+    }
     if !app.isActive() {
-        #[allow(deprecated)]
-        app.activateIgnoringOtherApps(true);
+        activate(&app);
     }
 }
 
@@ -217,8 +253,7 @@ pub fn raise(window: &WebviewWindow) {
         }
         window.makeKeyAndOrderFront(None);
     });
-    #[allow(deprecated)]
-    NSApplication::sharedApplication(main).activateIgnoringOtherApps(true);
+    activate(&NSApplication::sharedApplication(main));
 }
 
 /// Resizes in one frame change with the top edge held, so results grow

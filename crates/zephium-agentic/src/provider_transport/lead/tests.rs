@@ -363,6 +363,27 @@ fn http_failures_classify_without_provider_text() {
         stream_error("credit_balance_exhausted"),
         WorkModelError::OverBudget
     );
+    let groq_plan = br#"{"error":{"message":"Request too large for model `openai/gpt-oss-120b` in organization `org_x` service tier `on_demand` on tokens per minute (TPM): Limit 8000, Requested 15847, please reduce your message size and try again.","type":"tokens","code":"rate_limit_exceeded"}}"#;
+    assert_eq!(
+        classify(StatusCode::PAYLOAD_TOO_LARGE, groq_plan),
+        WorkModelError::PlanLimit
+    );
+    let openai_plan = br#"{"error":{"message":"Request too large for gpt-5 in organization org-x on tokens per min (TPM): Limit 30000, Requested 52000.","type":"tokens","code":"rate_limit_exceeded"}}"#;
+    assert_eq!(
+        classify(StatusCode::TOO_MANY_REQUESTS, openai_plan),
+        WorkModelError::PlanLimit
+    );
+    let reached = br#"{"error":{"message":"Rate limit reached for gpt-5 on tokens per min (TPM): Limit 30000, Used 29000, Requested 2000.","type":"tokens","code":"rate_limit_exceeded"}}"#;
+    assert_eq!(
+        classify(StatusCode::TOO_MANY_REQUESTS, reached),
+        WorkModelError::RateLimited {
+            retry_after_ms: None
+        }
+    );
+    assert_eq!(
+        classify(StatusCode::PAYLOAD_TOO_LARGE, b"{}"),
+        WorkModelError::ContextTooLong
+    );
     let mut headers = HeaderMap::new();
     headers.insert(RETRY_AFTER, HeaderValue::from_static("7"));
     assert_eq!(retry_after(&headers), Some(Duration::from_secs(7)));

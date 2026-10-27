@@ -912,9 +912,16 @@ fn classify(status: StatusCode, body: &[u8]) -> WorkModelError {
         || message.contains("context window")
         || message.contains("maximum context")
         || message.contains("input token count");
+    // Groq and OpenAI refuse a single request above the plan's tokens per
+    // minute as "Request too large ... on tokens per minute (TPM)".
+    let over_plan = message.contains("request too large")
+        && (message.contains("per minute")
+            || message.contains("per min")
+            || message.contains("(tpm)"));
     match status.as_u16() {
         401 | 403 => WorkModelError::Unauthorized,
         402 => WorkModelError::OverBudget,
+        413 | 429 if over_plan => WorkModelError::PlanLimit,
         413 => WorkModelError::ContextTooLong,
         429 if code.contains(&Some("insufficient_quota")) => WorkModelError::OverBudget,
         400..=499

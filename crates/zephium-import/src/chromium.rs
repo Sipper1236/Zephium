@@ -1,6 +1,7 @@
 //! Chrome, Brave and Edge share Chromium's profile layout: a user-data
 //! directory listing profiles in `Local State`, each with a `Bookmarks` JSON
-//! file and a `History` database.
+//! file and a `History` database. A profile signed in to an account may keep
+//! that account's bookmarks apart, in `AccountBookmarks`, in the same shape.
 
 use std::path::{Path, PathBuf};
 
@@ -10,6 +11,8 @@ use crate::{child, snapshot, Browser, ImportError, ImportNode, ImportedVisit, Lo
 
 /// Microseconds between 1601-01-01 (Chromium's epoch) and 1970-01-01.
 const EPOCH_OFFSET_SECONDS: i64 = 11_644_473_600;
+/// The profile's own bookmarks, and those of the account it is signed in to.
+const BOOKMARK_FILES: [&str; 2] = ["Bookmarks", "AccountBookmarks"];
 
 pub(crate) fn user_data(locations: &Locations, browser: Browser) -> Option<PathBuf> {
     let parts: &[&str] = match browser {
@@ -76,7 +79,7 @@ pub(crate) fn profiles(root: &Path) -> Vec<Profile> {
         .into_iter()
         .filter_map(|(id, name)| {
             let dir = child(root, &id)?;
-            let bookmarks = dir.join("Bookmarks").is_file();
+            let bookmarks = BOOKMARK_FILES.iter().any(|file| dir.join(file).is_file());
             let history = dir.join("History").is_file();
             (bookmarks || history).then_some(Profile {
                 id,
@@ -105,30 +108,66 @@ pub(crate) fn profile_dir(
 }
 
 /// The bookmarks bar opens at the top of the import; the other roots keep
-/// their own folder.
+/// their own folder. The profile's file and its account's are read together:
+/// either may hold everything the person sees, and a file that is there but
+/// cannot be read is a failure, not an empty one.
 pub(crate) fn bookmarks(profile: &Path) -> Result<Vec<ImportNode>, ImportError> {
-    let bytes = std::fs::read(profile.join("Bookmarks"))?;
-    parse_bookmarks(&bytes)
+    let mut files = Vec::new();
+    for name in BOOKMARK_FILES {
+        match std::fs::read(profile.join(name)) {
+            Ok(bytes) => files.push(bytes),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    if files.is_empty() {
+        return Err(ImportError::Missing);
+    }
+    parse_bookmark_files(&files.iter().map(Vec::as_slice).collect::<Vec<_>>())
 }
 
+#[cfg(test)]
 pub(crate) fn parse_bookmarks(bytes: &[u8]) -> Result<Vec<ImportNode>, ImportError> {
-    let file: Value = serde_json::from_slice(bytes).map_err(|_| ImportError::Unreadable)?;
-    let roots = file.get("roots").ok_or(ImportError::Unreadable)?;
-    let mut nodes = roots.get("bookmark_bar").map(children).unwrap_or_default();
-    for (key, fallback) in [("other", "Other bookmarks"), ("synced", "Mobile bookmarks")] {
-        if let Some(root) = roots.get(key) {
-            let children = children(root);
-            if !children.is_empty() {
-                let title = root
-                    .get("name")
-                    .and_then(Value::as_str)
-                    .filter(|name| !name.trim().is_empty())
-                    .unwrap_or(fallback);
-                nodes.push(ImportNode::Folder {
-                    title: title.to_owned(),
-                    children,
-                });
-            }
+    parse_bookmark_files(&[bytes])
+}
+
+/// What one root of the bookmarks tree holds across the files read.
+#[derive(Default)]
+struct Root {
+    name: Option<String>,
+    nodes: Vec<ImportNode>,
+}
+
+impl Root {
+    fn add(&mut self, root: Option<&Value>) {
+        let Some(root) = root else { return };
+        if self.name.is_none() {
+            self.name = root
+                .get("name")
+                .and_then(Value::as_str)
+                .filter(|name| !name.trim().is_empty())
+                .map(str::to_owned);
+        }
+        self.nodes.extend(children(root));
+    }
+}
+
+pub(crate) fn parse_bookmark_files(files: &[&[u8]]) -> Result<Vec<ImportNode>, ImportError> {
+    let (mut bar, mut other, mut mobile) = (Root::default(), Root::default(), Root::default());
+    for bytes in files {
+        let file: Value = serde_json::from_slice(bytes).map_err(|_| ImportError::Unreadable)?;
+        let roots = file.get("roots").ok_or(ImportError::Unreadable)?;
+        bar.add(roots.get("bookmark_bar"));
+        other.add(roots.get("other"));
+        mobile.add(roots.get("synced"));
+    }
+    let mut nodes = bar.nodes;
+    for (root, fallback) in [(other, "Other bookmarks"), (mobile, "Mobile bookmarks")] {
+        if !root.nodes.is_empty() {
+            nodes.push(ImportNode::Folder {
+                title: root.name.unwrap_or_else(|| fallback.to_owned()),
+                children: root.nodes,
+            });
         }
     }
     Ok(nodes)
@@ -230,6 +269,185 @@ mod tests {
         );
         assert!(parse_bookmarks(b"{}").is_err());
         assert!(parse_bookmarks(b"not json").is_err());
+    }
+
+    /// Shaped like a current Chrome on Windows with a Russian interface.
+    fn chrome_file(bar: &str, other: &str, mobile: &str) -> String {
+        let root = |id: u32, name: &str, children: &str| {
+            format!(
+                r#"{{"children":[{children}],"date_added":"13345678901234567",
+                "date_last_used":"0","date_modified":"13345678901234567",
+                "guid":"0bc5d13f-2cba-5d74-951f-3f233fe6c9{id:02}","id":"{id}",
+                "name":"{name}","type":"folder"}}"#
+            )
+        };
+        format!(
+            r#"{{"checksum":"d41d8cd98f00b204e9800998ecf8427e","roots":{{
+            "bookmark_bar":{},"other":{},"synced":{}}},
+            "sync_metadata":"CgA=","version":1}}"#,
+            root(1, "Панель закладок", bar),
+            root(2, "Другие закладки", other),
+            root(3, "Мобильные закладки", mobile),
+        )
+    }
+
+    fn url(id: u32, title: &str, address: &str) -> String {
+        format!(
+            r#"{{"date_added":"13345678901234567","date_last_used":"0","guid":"6f1c2f0c-0000-4000-8000-0000000000{id:02}",
+            "id":"{id}","meta_info":{{"power_bookmark_meta":""}},"name":"{title}","type":"url","url":"{address}"}}"#
+        )
+    }
+
+    fn link(title: &str, address: &str) -> ImportNode {
+        ImportNode::Link {
+            title: title.into(),
+            url: address.into(),
+        }
+    }
+
+    #[test]
+    fn a_signed_in_profile_keeps_its_bookmarks_in_the_account_file() {
+        let profile = tempfile::tempdir().unwrap();
+        // The profile's own file is there and empty, as Chrome leaves it once
+        // everything lives with the account.
+        std::fs::write(
+            profile.path().join("Bookmarks"),
+            chrome_file("", "", "").as_bytes(),
+        )
+        .unwrap();
+        std::fs::write(
+            profile.path().join("AccountBookmarks"),
+            chrome_file(
+                &[
+                    url(5, "Яндекс Почта", "https://mail.yandex.ru/"),
+                    url(
+                        6,
+                        "Википедия",
+                        "https://ru.wikipedia.org/wiki/Заглавная_страница",
+                    ),
+                ]
+                .join(","),
+                &url(7, "Позже", "https://later.example/"),
+                "",
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+        assert_eq!(
+            bookmarks(profile.path()).unwrap(),
+            vec![
+                link("Яндекс Почта", "https://mail.yandex.ru/"),
+                link(
+                    "Википедия",
+                    "https://ru.wikipedia.org/wiki/Заглавная_страница"
+                ),
+                ImportNode::Folder {
+                    title: "Другие закладки".into(),
+                    children: vec![link("Позже", "https://later.example/")]
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn the_profile_and_its_account_are_read_together_root_by_root() {
+        let profile = tempfile::tempdir().unwrap();
+        std::fs::write(
+            profile.path().join("Bookmarks"),
+            chrome_file(
+                &url(5, "Local bar", "https://local.example/"),
+                &url(6, "Local other", "https://local-other.example/"),
+                "",
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+        std::fs::write(
+            profile.path().join("AccountBookmarks"),
+            chrome_file(
+                &url(5, "Account bar", "https://account.example/"),
+                &url(6, "Account other", "https://account-other.example/"),
+                &url(7, "Phone", "https://phone.example/"),
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+        assert_eq!(
+            bookmarks(profile.path()).unwrap(),
+            vec![
+                link("Local bar", "https://local.example/"),
+                link("Account bar", "https://account.example/"),
+                ImportNode::Folder {
+                    title: "Другие закладки".into(),
+                    children: vec![
+                        link("Local other", "https://local-other.example/"),
+                        link("Account other", "https://account-other.example/")
+                    ]
+                },
+                ImportNode::Folder {
+                    title: "Мобильные закладки".into(),
+                    children: vec![link("Phone", "https://phone.example/")]
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn either_file_alone_is_enough_and_none_is_missing() {
+        let profile = tempfile::tempdir().unwrap();
+        assert!(matches!(
+            bookmarks(profile.path()),
+            Err(ImportError::Missing)
+        ));
+        std::fs::write(
+            profile.path().join("Bookmarks"),
+            chrome_file(&url(5, "A", "https://a.example/"), "", "").as_bytes(),
+        )
+        .unwrap();
+        assert_eq!(
+            bookmarks(profile.path()).unwrap(),
+            vec![link("A", "https://a.example/")]
+        );
+        std::fs::remove_file(profile.path().join("Bookmarks")).unwrap();
+        std::fs::write(
+            profile.path().join("AccountBookmarks"),
+            chrome_file(&url(5, "B", "https://b.example/"), "", "").as_bytes(),
+        )
+        .unwrap();
+        assert_eq!(
+            bookmarks(profile.path()).unwrap(),
+            vec![link("B", "https://b.example/")]
+        );
+    }
+
+    #[test]
+    fn a_file_that_cannot_be_read_is_a_failure_not_an_empty_import() {
+        let profile = tempfile::tempdir().unwrap();
+        std::fs::write(
+            profile.path().join("Bookmarks"),
+            chrome_file(&url(5, "A", "https://a.example/"), "", "").as_bytes(),
+        )
+        .unwrap();
+        std::fs::write(profile.path().join("AccountBookmarks"), b"{ truncated").unwrap();
+        assert!(matches!(
+            bookmarks(profile.path()),
+            Err(ImportError::Unreadable)
+        ));
+    }
+
+    #[test]
+    fn a_profile_with_only_account_bookmarks_is_offered() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(
+            root.path().join("Local State"),
+            br#"{"profile":{"info_cache":{"Default":{"name":"Person 1"}}}}"#,
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.path().join("Default")).unwrap();
+        std::fs::write(root.path().join("Default").join("AccountBookmarks"), b"{}").unwrap();
+        let found = profiles(root.path());
+        assert_eq!(found.len(), 1);
+        assert!(found[0].bookmarks && !found[0].history);
     }
 
     #[test]

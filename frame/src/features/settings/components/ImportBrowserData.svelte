@@ -98,9 +98,8 @@
       case "failed":
         return problemText(entry.problem, jobName);
       case "done":
-        return entry.done > 0
-          ? m.import_kind_added({ count: number.format(entry.done) })
-          : m.import_kind_current();
+        if (entry.done > 0) return m.import_kind_added({ count: number.format(entry.done) });
+        return entry.total === 0 ? m.import_kind_none() : m.import_kind_current();
     }
   }
 

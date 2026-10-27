@@ -67,3 +67,23 @@ test("an import shows each kind as it goes and what it brought", async () => {
   await screen.getByRole("button", { name: "Done" }).click();
   await expect.element(screen.getByRole("button", { name: "Import" })).toBeVisible();
 });
+
+test("a source with nothing to bring says so instead of claiming it is already here", async () => {
+  const fake = importer();
+  browserImport.provide(fake.adapter);
+  const screen = await render(ImportBrowserData);
+  await screen.getByRole("button", { name: "Import" }).click();
+
+  fake.emit({
+    source: "zen",
+    profile: "p",
+    finished: true,
+    cancelled: false,
+    kinds: [
+      { kind: "bookmarks", state: "done", done: 0, total: 0 },
+      { kind: "history", state: "done", done: 0, total: 40 },
+    ],
+  });
+  await expect.element(screen.getByText("Nothing to import")).toBeVisible();
+  await expect.element(screen.getByText("Already here")).toBeVisible();
+});
