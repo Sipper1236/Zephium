@@ -26,6 +26,7 @@ test("resuming after a pause starts a fresh time-left estimate", async () => {
   };
   native.call.mockImplementation(async (_profile: string, call: DownloadCall) => ({
     kind: call.kind === "list" ? "page" : "updates",
+    can_pause_resume: true,
     entries: [entry],
     next: null,
     removed: [],
@@ -87,6 +88,7 @@ test("native completion replaces cancellation with ID-scoped open and reveal act
     if (call.kind === "list")
       return {
         kind: "page",
+        can_pause_resume: true,
         cleanup: { running: false, error: null },
         entries: [entry],
         next: null,
@@ -95,6 +97,7 @@ test("native completion replaces cancellation with ID-scoped open and reveal act
     if (call.kind === "updates")
       return {
         kind: "updates",
+        can_pause_resume: true,
         cleanup: { running: false, error: null },
         entries: [entry],
         removed: [],
@@ -150,6 +153,7 @@ test("a folder the system refused says so once and offers another folder", async
     if (call.kind === "list")
       return {
         kind: "page",
+        can_pause_resume: true,
         cleanup: { running: false, error: null },
         entries: [entry],
         next: null,
@@ -158,6 +162,7 @@ test("a folder the system refused says so once and offers another folder", async
     if (call.kind === "updates")
       return {
         kind: "updates",
+        can_pause_resume: true,
         cleanup: { running: false, error: null },
         entries: [],
         removed: [],
@@ -199,6 +204,7 @@ test.each<[DownloadError, string]>([
       call.kind === "list"
         ? {
             kind: "page",
+            can_pause_resume: true,
             cleanup: { running: false, error: null },
             entries: [entry],
             next: null,
@@ -206,6 +212,7 @@ test.each<[DownloadError, string]>([
           }
         : {
             kind: "updates",
+            can_pause_resume: true,
             cleanup: { running: false, error: null },
             entries: [entry],
             removed: [],
@@ -245,6 +252,7 @@ test("retry resumes a retained interrupted transfer by ID and keeps cancellation
     if (call.kind === "list")
       return {
         kind: "page",
+        can_pause_resume: true,
         cleanup: { running: false, error: null },
         entries: [entry],
         next: null,
@@ -252,6 +260,7 @@ test("retry resumes a retained interrupted transfer by ID and keeps cancellation
       };
     return {
       kind: "updates",
+      can_pause_resume: true,
       cleanup: { running: false, error: null },
       entries: [entry],
       removed: [],
@@ -289,6 +298,7 @@ test("a resumable short response explains retry without presenting a finished co
     call.kind === "list"
       ? {
           kind: "page",
+          can_pause_resume: true,
           cleanup: { running: false, error: null },
           entries: [entry],
           next: null,
@@ -296,6 +306,7 @@ test("a resumable short response explains retry without presenting a finished co
         }
       : {
           kind: "updates",
+          can_pause_resume: true,
           cleanup: { running: false, error: null },
           entries: [entry],
           removed: [],
@@ -318,13 +329,18 @@ test("a resumable short response explains retry without presenting a finished co
   await screen.unmount();
 });
 
-function serving(initial: DownloadView, onCall: (call: DownloadCall) => DownloadView | null) {
+function serving(
+  initial: DownloadView,
+  onCall: (call: DownloadCall) => DownloadView | null,
+  canPauseResume = true,
+) {
   let entry = initial;
   native.call.mockClear();
   native.call.mockImplementation(async (_profile: string, call: DownloadCall) => {
     if (call.kind === "list")
       return {
         kind: "page",
+        can_pause_resume: canPauseResume,
         cleanup: { running: false, error: null },
         entries: [entry],
         next: null,
@@ -333,6 +349,7 @@ function serving(initial: DownloadView, onCall: (call: DownloadCall) => Download
     if (call.kind === "updates")
       return {
         kind: "updates",
+        can_pause_resume: canPauseResume,
         cleanup: { running: false, error: null },
         entries: [entry],
         removed: [],
@@ -355,6 +372,21 @@ const base: DownloadView = {
   total: "100",
   error: null,
 };
+
+test.each(["receiving", "paused"] as const)(
+  "a %s transfer without native pause support keeps only cancellation",
+  async (state) => {
+    serving({ ...base, state }, () => null, false);
+    const screen = await render(DownloadsList, { profile: "00000000000000000000000001" });
+
+    await expect.element(page.getByText("setup.exe", { exact: true })).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
+    for (const name of ["Pause", "Resume", "Retry Download"]) {
+      await expect.element(page.getByRole("button", { name, exact: true })).not.toBeInTheDocument();
+    }
+    await screen.unmount();
+  },
+);
 
 test("a receiving download can be paused and then resumed, and a pause is not shown as a problem", async () => {
   const profile = "00000000000000000000000001";

@@ -47,6 +47,7 @@ impl Downloads {
             done.finish(DownloadResponse::Updates {
                 entries: records,
                 removed,
+                can_pause_resume: platform::CAN_PAUSE_RESUME,
                 cleanup: self.cleanup_status(partition.profile()),
             });
             return;
@@ -301,6 +302,7 @@ impl Downloads {
                     entries: records.iter().map(DownloadRecord::view).collect(),
                     next,
                     supported: true,
+                    can_pause_resume: platform::CAN_PAUSE_RESUME,
                     cleanup: self.cleanup_status(partition.profile()),
                 });
             }

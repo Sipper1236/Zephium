@@ -1373,7 +1373,9 @@ export type DownloadPreferences = {
 	directory_identity?: string | null,
 };
 
-export type DownloadResponse = { kind: "updates"; entries: DownloadView[]; removed: string[]; cleanup: DownloadCleanup } | { kind: "page"; entries: DownloadView[]; next: string | null; supported: boolean; cleanup: DownloadCleanup } | { kind: "preferences"; preferences: DownloadPreferences; supported: boolean; site_downloads_require_confirmation: boolean } | { kind: "accepted" } | { kind: "applied" } | { kind: "error"; error: DownloadError };
+export type DownloadResponse = { kind: "updates"; entries: DownloadView[]; removed: string[];
+/**  The native transport can stop and retain a transfer for continuation. */
+can_pause_resume: boolean; cleanup: DownloadCleanup } | { kind: "page"; entries: DownloadView[]; next: string | null; supported: boolean; can_pause_resume: boolean; cleanup: DownloadCleanup } | { kind: "preferences"; preferences: DownloadPreferences; supported: boolean; site_downloads_require_confirmation: boolean } | { kind: "accepted" } | { kind: "applied" } | { kind: "error"; error: DownloadError };
 
 export type DownloadState = "pending" | "receiving" | "paused" | "held" | "cancelling" | "finalizing" | "completed" | "cancelled" | "interrupted" | "failed";
 

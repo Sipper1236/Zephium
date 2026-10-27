@@ -72,24 +72,35 @@ test("nothing chosen leaves nothing to clear", async () => {
   expect(native.call).not.toHaveBeenCalled();
 });
 
-test.each([
-  [
-    "the engine did not finish",
-    () => native.call.mockResolvedValue({ kind: "error", error: "failed" }),
-  ],
-  [
-    "the engine was unavailable",
-    () => native.call.mockResolvedValue({ kind: "error", error: "unavailable" }),
-  ],
-  ["the call was lost", () => native.call.mockRejectedValue(new Error("offline"))],
-])("a clear that fails because %s keeps the dialog open and says so", async (_, fail) => {
-  fail();
+test("a clear that did not finish keeps the dialog open and says so", async () => {
+  native.call.mockResolvedValue({ kind: "error", error: "failed" });
   const { screen, dialog } = await open();
   await dialog.getByRole("button", { name: "Clear data" }).click();
   await expect.element(page.getByRole("alert")).toHaveTextContent("Couldn't clear everything");
   await expect.element(page.getByRole("dialog")).toBeVisible();
   expect(screen.container.textContent).not.toContain("Browsing data cleared.");
 });
+
+test.each([
+  [
+    "the engine was unavailable",
+    () => native.call.mockResolvedValue({ kind: "error", error: "unavailable" }),
+  ],
+  ["the call was lost", () => native.call.mockRejectedValue(new Error("offline"))],
+])(
+  "a clear that is unavailable because %s explains that other data may have been cleared",
+  async (_, fail) => {
+    fail();
+    const { dialog } = await open();
+    await dialog.getByRole("button", { name: "Clear data" }).click();
+    await expect
+      .element(page.getByRole("alert"))
+      .toHaveTextContent(
+        "Clearing some selected data isn't available right now. Other selected data may have been cleared.",
+      );
+    await expect.element(page.getByRole("dialog")).toBeVisible();
+  },
+);
 
 test("a private window says it has nothing to clear", async () => {
   native.call.mockResolvedValue({ kind: "error", error: "private" });

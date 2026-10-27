@@ -74,8 +74,10 @@ enum DecisionPhase {
     NativePicker,
     PreparingDestination,
     PersistingDestination,
+    #[cfg(any(target_os = "macos", target_os = "windows", test))]
     ResumableInterruption,
     /// A download the person paused themselves.
+    #[cfg(any(target_os = "macos", target_os = "windows", test))]
     UserPaused,
     /// A finished download of a type that must be confirmed, waiting to be
     /// kept or deleted.
@@ -98,7 +100,9 @@ impl DecisionDeadline {
             DecisionPhase::Admission | DecisionPhase::PersistingDestination => {
                 Duration::from_secs(30)
             }
+            #[cfg(any(target_os = "macos", target_os = "windows", test))]
             DecisionPhase::ResumableInterruption => Duration::from_secs(5 * 60),
+            #[cfg(any(target_os = "macos", target_os = "windows", test))]
             DecisionPhase::UserPaused => Duration::from_secs(30 * 60),
             DecisionPhase::KeepDecision => Duration::from_secs(60 * 60),
         };
@@ -161,6 +165,7 @@ struct Transfer {
     kept: bool,
     /// A pause the person asked for is in flight; the native stop that
     /// follows is theirs, not a failure.
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     user_pausing: bool,
     /// What WebKit gave back to continue a stopped download from where it
     /// was. Memory only: it names a partial file this run owns.
@@ -918,6 +923,7 @@ fn needs_confirmation(kept: bool, filename: &str) -> bool {
 
 /// Only a transfer that is receiving, still has its staging folder, and is
 /// not already being stopped can be paused.
+#[cfg(any(target_os = "macos", target_os = "windows", test))]
 fn may_pause(
     state: DownloadState,
     cancelling: bool,

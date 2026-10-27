@@ -210,6 +210,7 @@ pub(super) fn queue_navigation_commit(
     let admitted = with_navigation_commit(id, move |host| {
         if host.rearm_navigation_presentation(id, &queued_permit, &queued_navigation, epoch) {
             host.emit_navigation_observation(id, &queued_permit, &queued_navigation, epoch);
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
             host.apply_popup_policy(id);
         }
     });

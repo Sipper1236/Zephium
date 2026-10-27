@@ -31,6 +31,7 @@
   let step = $state<"edit" | "delete">("edit");
   let busy = $state(false);
   let failed = $state(false);
+  let deletionUnconfirmed = $state(false);
   let opener: HTMLElement | null = null;
   const saved = $derived(profile ? drawn(profile).src : null);
   const valid = $derived(name.trim().length > 0);
@@ -43,6 +44,7 @@
       opener ??= document.activeElement instanceof HTMLElement ? document.activeElement : null;
       step = "edit";
       failed = false;
+      deletionUnconfirmed = false;
       name = profile?.name ?? "";
       choice = profile
         ? {
@@ -90,9 +92,10 @@
     if (!profile || busy) return;
     busy = true;
     failed = false;
-    const ok = await profiles.remove(profile.id);
+    const result = await profiles.remove(profile.id);
     busy = false;
-    if (ok) open = false;
+    if (result === "removed") open = false;
+    else if (result === "unconfirmed") deletionUnconfirmed = true;
     else failed = true;
   }
 
@@ -116,16 +119,23 @@
         <Dialog.Title class="settings-dialog-title"
           >{m.profiles_delete_title({ name: profile.name })}</Dialog.Title
         >
-        <Dialog.Description class="settings-dialog-description"
-          >{m.profiles_delete_body()}</Dialog.Description
-        >
-        {#if failed}<p class="failed" role="alert">{m.profiles_failed()}</p>{/if}
-        <footer>
-          <Button onclick={() => (step = "edit")} disabled={busy}>{m.action_cancel()}</Button>
-          <Button variant="danger" pending={busy} onclick={() => void remove()}
-            >{m.profiles_delete_confirm()}</Button
+        {#if deletionUnconfirmed}
+          <Dialog.Description class="settings-dialog-description"
+            >{m.profiles_delete_unconfirmed()}</Dialog.Description
           >
-        </footer>
+          <footer><Button onclick={() => (open = false)}>{m.panel_close()}</Button></footer>
+        {:else}
+          <Dialog.Description class="settings-dialog-description"
+            >{m.profiles_delete_body()}</Dialog.Description
+          >
+          {#if failed}<p class="failed" role="alert">{m.profiles_failed()}</p>{/if}
+          <footer>
+            <Button onclick={() => (step = "edit")} disabled={busy}>{m.action_cancel()}</Button>
+            <Button variant="danger" pending={busy} onclick={() => void remove()}
+              >{m.profiles_delete_confirm()}</Button
+            >
+          </footer>
+        {/if}
       {:else}
         <Dialog.Title class="settings-dialog-title"
           >{profile ? m.profiles_edit_title() : m.profiles_create_title()}</Dialog.Title

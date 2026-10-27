@@ -582,12 +582,18 @@ only, resolved by a resolver that refuses private ones, no cookie store, no
 credentials, no referrer and nothing of the page, two redirects, five seconds,
 256 KiB. Its decoders are the bounded memory-safe ones; only a fixed 32x32
 RGBA raster leaves it, so a page-controlled image is still never parsed by the
-chrome. What the prober cannot use (vectors, plain-http or private hosts, icons
-that need the page's cookies) is decoded by the page itself from one address
-the host names, same-origin first. A private profile never asks the prober for a
-page's addresses: all of its icon fetching stays inside its own partition and is
-kept in memory only. Where WebView2 reports the icon it chose (`FaviconChanged`
-and `GetFavicon`), that PNG is the primary source and the declared addresses
+chrome. Linux runs these observations in WebKitGTK's named
+`zephium-observation` JavaScript world with the async world-aware API; the
+document's main-world globals cannot replace the observer's JavaScript
+intrinsics. The fixed observer bounds fields before serialization, and the
+native adapter rejects strings above the 256 KiB result limit before handing
+them to the host. For icons the prober cannot use, such as vectors, plain-HTTP
+or private hosts, and icons that need the page's cookies, the page decodes an
+image from one address named by the host, same-origin first. A private profile
+never asks the prober for a page's addresses: all of its icon fetching stays
+inside its own partition and is kept in memory only. Where WebView2 reports the
+icon it chose (`FaviconChanged` and `GetFavicon`), that PNG is the primary
+source and the declared addresses
 wait for the load and back it up. A tab shows its page's icon, then its
 origin's, then the other spelling of its host (`www` and apex only). While a
 page of the site it was just on loads it keeps the icon it had until the new one
@@ -3232,7 +3238,7 @@ remain memory-only. Filesystem workers mediate staging, quarantine, exclusive
 publication and file-identity checks. Trusted UI actions carry download IDs;
 paths and native completions stay in Rust. Experimental Linux builds use a native
 WebKitGTK transport and GTK save dialogs with the same coordinator, identity-checked
-staging, exclusive publication and XDG origin metadata. Native resume and initial
+staging, exclusive publication and XDG origin metadata. Native pause/resume and initial
 blank-popup handoff remain unsupported; upload selection remains disabled on Linux.
 See [linux.md](linux.md) for the current adapter and qualification limits.
 Local-document viewing is outside this delivery's scope.

@@ -80,3 +80,14 @@ test("a private window says it has nothing to clear", async () => {
     .toHaveTextContent("A private window keeps nothing to clear.");
   await page.getByRole("button", { name: "Cancel" }).click();
 });
+
+test("an unavailable site clear stays open and explains the refusal", async () => {
+  native.call.mockResolvedValue({ kind: "error", error: "unavailable" });
+  await render(ClearSiteData);
+  clearRequest.ask("https://example.com/");
+  await page.getByRole("button", { name: "Clear data" }).click();
+  await expect
+    .element(page.getByRole("alert"))
+    .toHaveTextContent("Clearing site data isn't available right now.");
+  await expect.element(page.getByRole("dialog")).toBeVisible();
+});

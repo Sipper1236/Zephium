@@ -16,6 +16,8 @@ use objc2_foundation::{
 };
 use objc2_web_kit::{WKDownload, WKDownloadDelegate, WKDownloadRedirectPolicy, WKWebView};
 
+pub(super) const CAN_PAUSE_RESUME: bool = true;
+
 pub(super) type Native = Retained<WKDownload>;
 pub(super) type Delegate = Retained<DownloadDelegate>;
 pub(super) type Timer = Retained<NSTimer>;

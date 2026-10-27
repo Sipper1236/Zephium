@@ -1,6 +1,7 @@
 //! Linux adapter. Content views are built into a gtk::Fixed owned by the
 //! composition root; the stage positions them and draws the drop indicator.
 
+mod browsing_data;
 mod content_filter;
 mod find;
 mod stage;
@@ -9,6 +10,9 @@ pub(crate) fn open_external_app(_url: &str) -> bool {
     false
 }
 
+pub(crate) use browsing_data::{
+    clear as clear_browsing_data, forget_site, sites as browsing_data_sites,
+};
 pub(crate) use content_filter::{
     compile as compile_content_policy, content_policy_digest, enumerate_content_policy_cache,
     install_scoped_on_view as install_scoped_content_policy_on_view,
@@ -875,7 +879,7 @@ pub(crate) fn erase_profile_data(
     profile: zephium_core::ids::ProfileId,
     completion: Arc<crate::erasure::Completion>,
 ) {
-    use webkit2gtk::{WebsiteDataManagerExt, WebsiteDataManagerExtManual, WebsiteDataTypes};
+    use webkit2gtk::{WebsiteDataManagerExt, WebsiteDataManagerExtManual};
 
     let mut seen = std::collections::HashSet::new();
     managers.retain(|manager| seen.insert(manager.as_ptr() as usize));
@@ -887,11 +891,21 @@ pub(crate) fn erase_profile_data(
         }
         return;
     }
+    if !browsing_data::filesystem_supported() {
+        // A retained manager can still own origin-private filesystem data.
+        // Before 2.56, WebKitGTK's ALL flag neither clears nor enumerates it,
+        // so its native erasure cannot be verified before disk deletion.
+        completion.finish(zephium_core::ports::engine::ProfileDataErasureOutcome::Failed);
+        return;
+    }
 
     let remaining = Arc::new(AtomicUsize::new(managers.len()));
     // Missing/mismatched native manager provenance is sticky. Known managers
     // are still cleared and fetched best-effort, but disk deletion is denied.
     let failed = Arc::new(AtomicBool::new(!manager_provenance_valid));
+    // The pinned Rust binding's ALL constant predates WebKitGTK 2.56's
+    // filesystem bit. Include it whenever the loaded runtime supports it.
+    let all_types = browsing_data::all_website_data_types();
     for manager in managers {
         // clear() requires a Send callback even though WebKit invokes it on
         // this GTK main context. SendWeakRef is the binding's thread-checked
@@ -904,7 +918,7 @@ pub(crate) fn erase_profile_data(
         let roots = roots.clone();
         let completion = completion.clone();
         manager.clear(
-            WebsiteDataTypes::ALL,
+            all_types,
             gtk::glib::TimeSpan::from_seconds(0),
             None::<&gtk::gio::Cancellable>,
             move |result| {
@@ -919,23 +933,17 @@ pub(crate) fn erase_profile_data(
                     return;
                 };
                 let retained_manager = manager.clone();
-                manager.fetch(
-                    WebsiteDataTypes::ALL,
-                    None::<&gtk::gio::Cancellable>,
-                    move |result| {
-                        // Keep a strong native manager reference through the
-                        // fetch callback; dropping it earlier could turn an
-                        // ephemeral-context verification into a use-after-
-                        // release race hidden by an empty directory.
-                        drop(retained_manager);
-                        if !matches!(result, Ok(ref records) if records.is_empty()) {
-                            failed.store(true, Ordering::Release);
-                        }
-                        complete_linux_manager_erasure(
-                            &remaining, &failed, roots, profile, completion,
-                        );
-                    },
-                );
+                manager.fetch(all_types, None::<&gtk::gio::Cancellable>, move |result| {
+                    // Keep a strong native manager reference through the
+                    // fetch callback; dropping it earlier could turn an
+                    // ephemeral-context verification into a use-after-
+                    // release race hidden by an empty directory.
+                    drop(retained_manager);
+                    if !matches!(result, Ok(ref records) if records.is_empty()) {
+                        failed.store(true, Ordering::Release);
+                    }
+                    complete_linux_manager_erasure(&remaining, &failed, roots, profile, completion);
+                });
             },
         );
     }
@@ -1540,6 +1548,35 @@ mod tests {
     }
 
     #[test]
+    fn erasure_without_a_retained_manager_removes_only_the_selected_profile() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = crate::erasure::canonical_owned_root(&temp.path().join("profiles")).unwrap();
+        let profile = ProfileId::from(71);
+        let other = ProfileId::from(72);
+        let path = crate::erasure::prepare_profile_directory(&root, profile).unwrap();
+        let other_path = crate::erasure::prepare_profile_directory(&root, other).unwrap();
+        std::fs::create_dir(path.join("filesystem")).unwrap();
+        std::fs::write(path.join("filesystem/retained"), b"private data").unwrap();
+        std::fs::write(other_path.join("retained"), b"other profile").unwrap();
+
+        let (tx, rx) = mpsc::channel();
+        let completion = crate::erasure::Completion::start(
+            Box::new(move |outcome| tx.send(outcome).unwrap()),
+            Arc::new(AtomicBool::new(true)),
+        );
+        erase_profile_data(Vec::new(), true, vec![root], profile, completion);
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(5)).unwrap(),
+            zephium_core::ports::engine::ProfileDataErasureOutcome::Verified
+        );
+        assert!(!path.exists());
+        assert_eq!(
+            std::fs::read(other_path.join("retained")).unwrap(),
+            b"other profile"
+        );
+    }
+
+    #[test]
     #[ignore = "requires Xvfb and WebKitGTK at the supported security floor; CI runs this explicitly"]
     fn principal_world_handlers_are_mutually_isolated_from_three_peers_and_page_world() {
         enforce_runtime_security_floor().expect("test runner must use supported WebKitGTK");
@@ -1646,6 +1683,32 @@ mod tests {
             }
         }
 
+        let (observation_tx, observation_rx) = mpsc::channel();
+        assert!(crate::platform::cosmetic_pull::evaluate(
+            &view,
+            "JSON.stringify({title:document.title, pageGlobal:typeof globalThis.__zephiumPrincipalProbe})",
+            move |result| {
+                let _ = observation_tx.send(result);
+            },
+        ));
+        let mut observation = None;
+        while observation.is_none() && Instant::now() < deadline {
+            while gtk::events_pending() {
+                gtk::main_iteration_do(false);
+            }
+            observation = observation_rx.try_recv().ok();
+            if observation.is_none() {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+        let observation = observation
+            .flatten()
+            .expect("isolated WebKitGTK evaluation returned a bounded string");
+        let observation: serde_json::Value =
+            serde_json::from_str(&observation).expect("bounded observation is JSON");
+        assert_eq!(observation["title"], "page-isolated");
+        assert_eq!(observation["pageGlobal"], "undefined");
+
         while view.webview().title().as_deref() == Some("loading") && Instant::now() < deadline {
             while gtk::events_pending() {
                 gtk::main_iteration_do(false);
@@ -1740,7 +1803,7 @@ mod tests {
                 received > 0,
                 "WebKit closed the test request before sending headers"
             );
-            let body = b"<!doctype html><title>hostile renderer probe</title>";
+            let body = b"<!doctype html><title>hostile renderer probe</title><script>document.cookie='linux_data_probe=1; Path=/; SameSite=Lax'; localStorage.setItem('linux_data_probe','present')</script>";
             write!(
                 stream,
                 "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
@@ -1771,6 +1834,168 @@ mod tests {
             persistent.webview().title().as_deref(),
             Some("hostile renderer probe"),
             "IPC probe must run on the served test document"
+        );
+        let (sites_tx, sites_rx) = mpsc::channel();
+        crate::platform::linux::browsing_data_sites(
+            &persistent_obligation.managers[0],
+            zephium_core::browsing_data::EngineDataCompletion::new(move |reply| {
+                let _ = sites_tx.send(reply);
+            }),
+        );
+        let sites_deadline = Instant::now() + Duration::from_secs(5);
+        let sites_reply = loop {
+            while gtk::events_pending() {
+                gtk::main_iteration_do(false);
+            }
+            match sites_rx.try_recv() {
+                Ok(reply) => break reply,
+                Err(mpsc::TryRecvError::Empty) if Instant::now() < sites_deadline => {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Err(error) => panic!("WebKitGTK profile site listing timed out: {error}"),
+            }
+        };
+        let has_filesystem_data_api = browsing_data::filesystem_supported();
+        let zephium_core::browsing_data::EngineDataReply::Sites { sites, partial } = sites_reply
+        else {
+            panic!("WebKitGTK returned an incomplete profile site listing: {sites_reply:?}");
+        };
+        assert_eq!(partial, !has_filesystem_data_api);
+        assert!(
+            sites
+                .iter()
+                .any(|site| site.name == "127.0.0.1" && site.storage),
+            "the manager must report storage from its own loaded profile"
+        );
+
+        let (range_tx, range_rx) = mpsc::channel();
+        crate::platform::linux::clear_browsing_data(
+            &persistent_obligation.managers[0],
+            zephium_core::browsing_data::EngineDataKinds {
+                site_data: true,
+                ..Default::default()
+            },
+            Some(0),
+            zephium_core::browsing_data::EngineDataCompletion::new(move |reply| {
+                let _ = range_tx.send(reply);
+            }),
+        );
+        assert_eq!(
+            range_rx
+                .try_recv()
+                .expect("unsupported range fails immediately"),
+            zephium_core::browsing_data::EngineDataReply::Failed(
+                zephium_core::browsing_data::EngineDataFailure::Unsupported
+            )
+        );
+
+        if !has_filesystem_data_api {
+            let (clear_tx, clear_rx) = mpsc::channel();
+            crate::platform::linux::clear_browsing_data(
+                &persistent_obligation.managers[0],
+                zephium_core::browsing_data::EngineDataKinds {
+                    site_data: true,
+                    ..Default::default()
+                },
+                None,
+                zephium_core::browsing_data::EngineDataCompletion::new(move |reply| {
+                    let _ = clear_tx.send(reply);
+                }),
+            );
+            assert_eq!(
+                clear_rx
+                    .try_recv()
+                    .expect("unsupported clear fails immediately"),
+                zephium_core::browsing_data::EngineDataReply::Failed(
+                    zephium_core::browsing_data::EngineDataFailure::Unsupported
+                )
+            );
+
+            let (erase_tx, erase_rx) = mpsc::channel();
+            let completion = crate::erasure::Completion::start(
+                Box::new(move |outcome| {
+                    let _ = erase_tx.send(outcome);
+                }),
+                Arc::new(AtomicBool::new(true)),
+            );
+            erase_profile_data(
+                vec![persistent_obligation.managers[0].clone()],
+                true,
+                vec![data_path.clone()],
+                profile,
+                completion,
+            );
+            assert_eq!(
+                erase_rx
+                    .try_recv()
+                    .expect("unverifiable erasure fails immediately"),
+                zephium_core::ports::engine::ProfileDataErasureOutcome::Failed
+            );
+            assert!(
+                data_path.exists(),
+                "refusal must not delete the profile directory"
+            );
+        }
+
+        let (forget_tx, forget_rx) = mpsc::channel();
+        crate::platform::linux::forget_site(
+            &persistent_obligation.managers[0],
+            "127.0.0.1".to_owned(),
+            zephium_core::browsing_data::EngineDataCompletion::new(move |reply| {
+                let _ = forget_tx.send(reply);
+            }),
+        );
+        let forget_deadline = Instant::now() + Duration::from_secs(5);
+        let forget_reply = loop {
+            while gtk::events_pending() {
+                gtk::main_iteration_do(false);
+            }
+            match forget_rx.try_recv() {
+                Ok(reply) => break reply,
+                Err(mpsc::TryRecvError::Empty) if Instant::now() < forget_deadline => {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Err(error) => panic!("WebKitGTK named-site removal timed out: {error}"),
+            }
+        };
+        assert_eq!(
+            forget_reply,
+            if has_filesystem_data_api {
+                zephium_core::browsing_data::EngineDataReply::Cleared
+            } else {
+                zephium_core::browsing_data::EngineDataReply::Failed(
+                    zephium_core::browsing_data::EngineDataFailure::Unsupported,
+                )
+            }
+        );
+        let (verify_tx, verify_rx) = mpsc::channel();
+        crate::platform::linux::browsing_data_sites(
+            &persistent_obligation.managers[0],
+            zephium_core::browsing_data::EngineDataCompletion::new(move |reply| {
+                let _ = verify_tx.send(reply);
+            }),
+        );
+        let verify_deadline = Instant::now() + Duration::from_secs(5);
+        let verify_reply = loop {
+            while gtk::events_pending() {
+                gtk::main_iteration_do(false);
+            }
+            match verify_rx.try_recv() {
+                Ok(reply) => break reply,
+                Err(mpsc::TryRecvError::Empty) if Instant::now() < verify_deadline => {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Err(error) => panic!("WebKitGTK post-removal listing timed out: {error}"),
+            }
+        };
+        let zephium_core::browsing_data::EngineDataReply::Sites { sites, partial } = verify_reply
+        else {
+            panic!("WebKitGTK did not return a site listing: {verify_reply:?}");
+        };
+        assert_eq!(partial, !has_filesystem_data_api);
+        assert_eq!(
+            sites.iter().any(|site| site.name == "127.0.0.1"),
+            !has_filesystem_data_api
         );
         persistent
             .evaluate_script(

@@ -1,5 +1,62 @@
 # Linux/Arch port handoff
 
+## Build and handoff update, 27 October 2026, 18:37 ADT
+
+Work is in `/home/rayyan/Zephium-prs/linux-integration` on `linux-integration`.
+Check `git status` for any changes since the latest checkpoint. The earlier checkout at
+`/home/rayyan/Zephium` has not been reset; its `target` directory is shared
+with this build. Ask the user before opening any new upstream PR. The existing
+#221 remains a draft.
+
+The Arch release-4 build completed successfully at 18:37 ADT. The build log is
+`/home/rayyan/Zephium/target/linux-handoff/linux-release4-build.log`. It was
+started from `packaging/arch` with `makepkg --nodeps --noconfirm`, Node 24 on
+`PATH`, and `CARGO_TARGET_DIR=/home/rayyan/Zephium/target`. No CPU limit was
+set. The log contains existing deprecation and unused-code warnings, and makepkg
+reported that it could not generate a debug index because no debug symbols were
+present; package creation nevertheless succeeded. `--nodeps` skips package dependency checks and
+does not establish a clean-machine build.
+
+The package is `packaging/arch/zephium-1.0.3-4-x86_64.pkg.tar.zst`, SHA-256
+`d307a94ec7fda0cc62b315a889f2e323cc28475998f6f69263aa406d3c46a552`.
+Validation passed, using the prepared
+`target/linux-handoff/validate-integration-package.py` helper with this checksum,
+`--release 4` and `--current-session`. The helper installs release 1, upgrades to release 4
+and removes it in a disposable pacman root, compares packaged resources and ELF
+identity with the integration checkout and shared release binary, then runs
+isolated X11 and Wayland startup probes. `--current-session` also opens a
+temporary window on the live Wayland session with disposable data. Pacman
+reported 27 files and none missing; the exact packaged binary stayed alive for
+10 seconds in each of the X11, headless Wayland and current Hyprland session
+probes. Installation, upgrade and removal used a disposable root, and host
+runtime libraries were used. The log is
+`target/linux-handoff/linux-release4-package-validation.log`. These are package
+and startup checks, not full browser or clean-distribution qualification.
+Release 3 is stale:
+it predates the browsing-data safety changes.
+
+The latest UI work is in `frame/src/domain/profiles/profiles.svelte.ts` and
+`frame/src/features/settings/components/profiles/ProfileSheet.svelte`. A
+deletion with an unknown outcome now says completion could not be confirmed,
+instead of reporting success or asking the user to submit it again. It retains
+drafts until deletion is confirmed. Six focused profile domain tests and two
+profile settings component tests passed, along with Svelte checking, targeted
+ESLint, Stylelint and Prettier. Rust formatting, package syntax, desktop-entry
+validation and `git diff --check` also passed. The rest of the latest engine and
+browsing-data evidence is described below.
+
+A focused Linux engine test added after the package build verifies that the
+no-retained-manager erasure path removes a selected profile directory while
+leaving a second profile intact. It passed; only test code changed after the
+package build. This does not prove that every old WebKit subprocess has exited
+or that a real WebKit profile is recovered correctly after restart.
+
+Still needed: a durable way to clear chrome-local drafts when profile deletion
+finishes after the UI stops observing; native recovery qualification; WebKitGTK
+2.56 testing of filesystem-data removal and grouped site records; and the
+remaining browser and compositor workflows described in `docs/linux.md`.
+WebExtensions and native Ask/Work browsing remain explicit experimental gaps.
+
 ## Active integration branch, 27 October 2026
 
 Continue active work from `/home/rayyan/Zephium-prs/linux-integration`, branch
@@ -18,12 +75,59 @@ Upstream's new download pause bookkeeping is initialized on Linux. Pause and
 resume return `Unsupported` before changing or stopping a transfer because
 WebKitGTK exposes no retained resume operation.
 
-Current integration checks: locked default desktop library check passed;
-engine `agentic-browser` suite **410 passed, 0 failed, 6 ignored**; frontend type
-checking and Rust formatting passed. Logs are `integration-check.*`,
-`integration-engine-*`, `integration-frame-typecheck.*` and `integration-format.*`
-in the original evidence directory. The older 970-test frontend result below
-does not cover the newly merged upstream frontend changes.
+The locked desktop library check
+passed after the WebKitGTK adapters and download UI changes. The current engine
+suite passed **412 tests, 0 failed, 6 ignored**, and the desktop suite passed
+**272 tests, 0 failed, 4 ignored**. The frontend suite passed **1,029 tests**
+after the download capability changes; Svelte checking, ESLint, Stylelint,
+Prettier and Knip also passed. Strict engine Clippy passed after narrowing two
+macOS/Windows-only struct fields. Rust formatting and `git diff --check` passed.
+The Linux desktop check and release build still emit upstream deprecations and
+unused-code warnings, including guarded Work paths.
+
+X11 and Wayland native tests passed for isolated-world observations and basic
+profile browsing-data operations. The disposable Secret Service probe passed
+unavailable-service, credential roundtrip/replacement/deletion, and missing
+default collection cases. Evidence is in `linux-final-*` and
+`linux-observation-world-*` under the shared `target/linux-handoff/` directory.
+
+**Browsing-data safety:** a native probe showed that WebKitGTK groups subdomain
+records and, on 2.54, can retain origin-private filesystem data after the public
+all-data clear. `crates/zephium-engine/src/platform/linux/browsing_data.rs` now
+reports partial listings and refuses site-data clearing on 2.54. It refuses a
+narrow site removal when WebKit reports a broader record. Cache-only clearing
+remains available. The 2.56 filesystem-data flag is included dynamically, but
+that runtime path still needs native qualification. Profile erasure with a
+retained 2.54 manager also fails closed, and a bounded in-flight lease prevents
+erasure from racing native browsing-data callbacks. The deletion journal retries
+on restart. Settings reports unavailable or unconfirmed outcomes instead of
+claiming success. Nine site-data unit tests, 25 settings component tests and 15
+app browsing-data tests passed; the engine suite and native X11/Wayland tests
+passed after the guard changes. The grouped-record and filesystem probes are in
+`target/linux-handoff/` under the shared target. Release 3 predates these fixes
+and is stale; do not distribute it as the current port.
+The Arch recipe now uses `pkgrel=4`; its fresh build and package checks passed
+as recorded above.
+
+The profile deletion dialog now distinguishes an unconfirmed outcome, including
+a lost admission response, from an explicit rejection. It keeps local drafts
+when completion is unknown; six focused domain tests and two profile settings
+component tests passed. A remaining privacy follow-up is durable cleanup of
+those chrome-local drafts if deletion completes after the UI stops observing or
+after a restart. A missing profile in the roster alone is insufficient proof:
+quarantined profiles are hidden before durable authorization and may return
+after restart if authorization never committed.
+
+The x86_64 `1.0.3-3` package was built on 27 October with Rust 1.95.0, Node
+24.18.0 and pnpm 11.17.0. Its SHA-256 is
+`2520348638c6455bdd1e3aba7a82fefd53e68e7c38dfb7ff304f311acbc6b2ab`.
+An isolated pacman root passed release-1 installation, release-3 upgrade,
+27-file presence, resource and ELF identity checks, and removal. The exact
+packaged binary initialized and stayed alive for 10 seconds on Xvfb and
+headless Weston. The same freshly built binary also passed a 10-second startup
+probe on the current Hyprland v0.56.2 desktop with a disposable profile. These
+are startup and package checks, not proof of all browser workflows or portal
+approval. See `linux-final-package-validation.log` in the evidence directory.
 
 The native test harness first encountered a teardown race in Mesa's disposable
 shader cache. Disabling that unused disk cache in the native-only runner made
@@ -31,14 +135,17 @@ the complete #221 X11 harness pass with **2 tests**, exit 0. #221's modifier tes
 also required a pure mask-filter seam so it could run without GTK initialization.
 Its corrected commit is `561888db`; the exact desktop suite passed **260 tests**,
 with **2 ignored**. The existing draft has been updated and remains a draft.
-The resize follow-up is now `d7d4b2cb` on top of that commit and retains a one-file,
-44-line diff. Its final test build is running; no new PR has been opened.
+The resize follow-up is `d7d4b2cb` on top of that commit and retains a one-file,
+44-line diff. Its final native X11 and Wayland rerun passed after isolating the
+Mesa shader cache. No new PR has been opened.
 
-Next: finish merge qualification, hide unsupported pause/resume actions using
-native capability readback, qualify the native resize and download fixtures on
-both displays, run current desktop/frontend suites and relevant strict lint and
-boundary checks, then build and validate a fresh package from this integration
-branch. No new full-port production package has been built in this resumed run.
+Next: qualify the 2.56 browsing-data path against a real stable runtime,
+including grouped subdomains and origin-private filesystem data. Complete
+outstanding Linux broker and desktop
+workflow qualification, strict lint and boundary checks, and prepare reviewable
+upstream slices. Keep extension hosting and native Ask/Work browser adapters
+documented as unsupported; the accepted WebKitGTK architecture does not provide
+a native WebExtension runtime. Ask the user before submitting each new PR.
 
 ## Resumed port work, 27 October 2026, 02:08 UTC
 

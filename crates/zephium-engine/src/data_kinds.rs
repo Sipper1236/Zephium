@@ -5,7 +5,7 @@ use zephium_core::browsing_data::{EngineDataKinds, EngineSite, MAX_ENGINE_SITES}
 
 /// The WebKit website data types Zephium removes, named after the
 /// `WKWebsiteDataType` constants.
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", target_os = "linux", test))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum WebKitDataType {
     Cookies,
@@ -21,7 +21,7 @@ pub(crate) enum WebKitDataType {
 }
 
 /// Cookies, and the storage a page keeps for itself.
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", target_os = "linux", test))]
 pub(crate) const WEBKIT_SITE_DATA: [WebKitDataType; 8] = [
     WebKitDataType::Cookies,
     WebKitDataType::LocalStorage,
@@ -34,12 +34,12 @@ pub(crate) const WEBKIT_SITE_DATA: [WebKitDataType; 8] = [
 ];
 
 /// The HTTP cache.
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", target_os = "linux", test))]
 pub(crate) const WEBKIT_CACHE: [WebKitDataType; 2] =
     [WebKitDataType::DiskCache, WebKitDataType::MemoryCache];
 
 /// One removal WebKit performs.
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", target_os = "linux", test))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum WebKitStep {
     /// Everything of these types modified at or after `since` (unix seconds),
@@ -56,7 +56,7 @@ pub(crate) enum WebKitStep {
 
 /// The removals that clear `kinds` back to `since`. WebKit has no visited
 /// link store to clear, so history is Zephium's own and adds no step.
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", target_os = "linux", test))]
 pub(crate) fn webkit_plan(kinds: EngineDataKinds, since: Option<i64>) -> Vec<WebKitStep> {
     let mut types = Vec::new();
     if kinds.site_data {
@@ -132,27 +132,25 @@ pub(crate) fn webview2_kinds(kinds: EngineDataKinds) -> i32 {
 /// Hosts a listing names, one entry per host, in the order a person reads
 /// them. A name that is not a host is dropped.
 pub(crate) fn merge_sites(raw: impl IntoIterator<Item = (String, bool, bool)>) -> Vec<EngineSite> {
-    let mut sites: Vec<EngineSite> = Vec::new();
+    let mut sites = std::collections::BTreeMap::<String, (bool, bool)>::new();
     for (name, cookies, storage) in raw {
         let name = name.trim().trim_start_matches('.').to_ascii_lowercase();
         if !zephium_core::browsing_data::is_site_name(&name) {
             continue;
         }
-        match sites.iter_mut().find(|site| site.name == name) {
-            Some(site) => {
-                site.cookies |= cookies;
-                site.storage |= storage;
-            }
-            None => sites.push(EngineSite {
-                name,
-                cookies,
-                storage,
-            }),
-        }
+        let entry = sites.entry(name).or_default();
+        entry.0 |= cookies;
+        entry.1 |= storage;
     }
-    sites.sort_by(|a, b| a.name.cmp(&b.name));
-    sites.truncate(MAX_ENGINE_SITES);
     sites
+        .into_iter()
+        .take(MAX_ENGINE_SITES)
+        .map(|(name, (cookies, storage))| EngineSite {
+            name,
+            cookies,
+            storage,
+        })
+        .collect()
 }
 
 #[cfg(test)]

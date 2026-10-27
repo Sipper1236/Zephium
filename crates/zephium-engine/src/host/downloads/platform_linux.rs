@@ -5,6 +5,8 @@ use gtk::glib::{self, object::ObjectType, ControlFlow};
 use gtk::prelude::*;
 use webkit2gtk::{DownloadExt, URIResponseExt};
 
+pub(super) const CAN_PAUSE_RESUME: bool = false;
+
 pub(super) type Native = webkit2gtk::Download;
 pub(super) type Delegate = Rc<Cell<Option<DownloadError>>>;
 pub(super) type Timer = glib::SourceId;
@@ -238,7 +240,6 @@ impl Downloads {
                 cancelling: false,
                 persisting_terminal: false,
                 kept: false,
-                user_pausing: false,
                 deadline: DecisionDeadline::new(DecisionPhase::Admission, Instant::now()),
             },
         );
@@ -687,6 +688,34 @@ mod tests {
         window.add(&container);
         let profile = ProfileId::from(901);
         let manager = Downloads::new(Arc::new(PrivateStore), Arc::new(|_| {}));
+        for call in [
+            DownloadCall::Updates,
+            DownloadCall::List {
+                before: None,
+                limit: 50,
+            },
+        ] {
+            let (sender, receiver) = std::sync::mpsc::channel();
+            manager.call(
+                Partition::Ephemeral(profile),
+                call,
+                DownloadCompletion::new(move |response| sender.send(response).unwrap()),
+            );
+            match receiver.recv_timeout(Duration::from_secs(1)).unwrap() {
+                DownloadResponse::Updates {
+                    can_pause_resume, ..
+                }
+                | DownloadResponse::Page {
+                    can_pause_resume, ..
+                } => {
+                    assert!(
+                        !can_pause_resume,
+                        "Linux must not advertise native pause/resume"
+                    );
+                }
+                response => panic!("unexpected snapshot: {response:?}"),
+            }
+        }
         let preferences = DownloadPreferences {
             directory: Some(directory.path().to_str().unwrap().to_owned()),
             ..DownloadPreferences::default()
@@ -743,6 +772,15 @@ mod tests {
             "the native writer waits for explicit GTK consent"
         );
         assert!(!directory.path().join("coordinator.txt").exists());
+        let active_id = *manager.active.borrow().keys().next().unwrap();
+        assert_eq!(
+            manager.user_pause(Partition::Ephemeral(profile), active_id),
+            Err(DownloadError::Unsupported),
+        );
+        assert_eq!(
+            manager.resume(Partition::Ephemeral(profile), active_id),
+            Err(DownloadError::Unsupported),
+        );
         let panel = manager
             .active
             .borrow()

@@ -23,6 +23,7 @@ export class DownloadSession {
   preferences = $state.raw<DownloadPreferences | null>(null);
   error = $state<DownloadError | null>(null);
   supported = $state(true);
+  canPauseResume = $state(false);
   cleanup = $state.raw<DownloadCleanup>({ running: false, error: null });
   siteDownloadsRequireConfirmation = $state(false);
   loading = $state(false);
@@ -78,6 +79,7 @@ export class DownloadSession {
     this.stopListening?.();
     this.stopListening = null;
     this.entries = [];
+    this.canPauseResume = false;
     this.cleanup = { running: false, error: null };
     this.cleanupUpdatedDuringLoad = false;
     this.removedDuringLoad.clear();
@@ -101,6 +103,7 @@ export class DownloadSession {
       const response = await commands.downloadCall(this.profile, { kind: "updates" });
       if (generation !== this.generation) return;
       if (response.kind === "updates") {
+        this.canPauseResume = response.can_pause_resume === true;
         this.cleanup = response.cleanup;
         if (this.loading) this.cleanupUpdatedDuringLoad = true;
         const records = new SvelteMap(this.entries.map((entry) => [entry.id, entry]));
@@ -149,6 +152,7 @@ export class DownloadSession {
       if (generation !== this.generation) return;
       if (response.kind === "page") {
         this.supported = response.supported;
+        this.canPauseResume = response.can_pause_resume === true;
         if (!this.cleanupUpdatedDuringLoad) this.cleanup = response.cleanup;
         const entries = response.entries
           .filter((entry) => !this.removedDuringLoad.has(entry.id))

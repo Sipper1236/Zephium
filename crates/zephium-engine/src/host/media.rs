@@ -10,6 +10,7 @@
 /// seven same-origin frames, the one playing and heard, else one paused part
 /// way, else one finished; the longest wins a tie. Both scripts use it, so
 /// they agree on the element without sharing any state.
+#[cfg(any(target_os = "macos", target_os = "windows", test))]
 const CHOOSE_JS: &str = r#"
   function documents() {
     var list = [document];
@@ -53,6 +54,7 @@ const CHOOSE_JS: &str = r#"
 /// a burst (a new item loading, a play that waits for data) is one answer.
 /// Listeners, the title observer and the one timer are removed before every
 /// answer, and a newer watch of the same document cancels this one.
+#[cfg(any(target_os = "macos", target_os = "windows", test))]
 pub(super) const MEDIA_WATCH_JS: &str = r#"(function(last){
   'use strict';
   var STOP = '__zephium_media_stop__';
@@ -151,6 +153,7 @@ pub(super) const MEDIA_WATCH_JS: &str = r#"(function(last){
 
 /// Acts on the element the watch follows. Run as the browser's own gesture,
 /// in the content world automatic picture in picture uses, never the page's.
+#[cfg(any(target_os = "macos", target_os = "windows", test))]
 pub(super) const MEDIA_ACTION_JS: &str = r#"(async (action, value) => {
   __CHOOSE__
   try {
@@ -175,6 +178,7 @@ pub(super) const MEDIA_ACTION_JS: &str = r#"(async (action, value) => {
   } catch { return false; }
 })"#;
 
+#[cfg(any(target_os = "macos", target_os = "windows", test))]
 pub(super) fn watch_expression(last: Option<&str>) -> String {
     let last = last
         .filter(|token| super::favicon::valid_token(token))
@@ -186,6 +190,7 @@ pub(super) fn watch_expression(last: Option<&str>) -> String {
 
 /// The action for the document at `url` only; `None` for a seek that is not a
 /// finite time.
+#[cfg(any(target_os = "macos", target_os = "windows", test))]
 pub(super) fn action_expression(
     url: &str,
     action: zephium_core::ports::engine::MediaAction,
@@ -318,17 +323,6 @@ mod supported {
             });
             crate::platform::imp::automatic_pip(&view.view, script, current);
         }
-    }
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
-impl super::EngineHost {
-    pub(crate) fn watch_media(&mut self, _id: zephium_core::ids::ItemId) {}
-    pub(crate) fn media_action(
-        &self,
-        _id: zephium_core::ids::ItemId,
-        _action: zephium_core::ports::engine::MediaAction,
-    ) {
     }
 }
 

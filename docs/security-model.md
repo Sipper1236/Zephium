@@ -1543,6 +1543,13 @@ These inherited properties must not be overstated:
 - Persistent profiles have separate on-disk contexts. Private tabs in one profile share
   a single verified in-memory context, so their cookies/storage form one process-lifetime
   incognito session without sharing across profiles.
+- Website-data records may cover multiple subdomains. A narrower site deletion is
+  refused when it could remove a broader record. WebKitGTK 2.54 cannot address
+  origin-private filesystem data through its public data API, so site-data deletion
+  and profile erasure with a retained native manager fail closed; listings are
+  partial. The 2.56 filesystem-data flag is wired but needs native qualification.
+  Profile erasure waits for outstanding browsing-data callbacks, and journaled
+  deletions are retried after restart rather than being reported as complete early.
 - A single download dispatcher is installed on each raw WebContext before its
   first load. Only an opted-in human view can claim its own native transfer.
   Missing-source and context-only transfers stop signal emission and cancel once;
@@ -1552,9 +1559,11 @@ These inherited properties must not be overstated:
   view, navigation and presentation checks. Every transfer requires a native save
   dialog because WebKitGTK does not expose trustworthy initiation evidence.
   Staging files are identity-checked, publication uses exclusive rename, and
-  XDG origin metadata must be written successfully. Native resume and initial
+  XDG origin metadata must be written successfully. Native pause/resume and initial
   blank-popup handoff remain unsupported. Executable content is rejected by the
   download panel's Open action. See [linux.md](linux.md) for current limitations.
+  Download snapshots report the transport's pause/resume capability; Linux
+  advertises neither control and rejects either request before mutating a transfer.
 - The current integration uses the GTK3/WebKit2GTK 4.1 bindings. Top-level cross-site
   process swapping reduces process reuse but is not WebKit full site isolation, does not
   promise a process per origin/frame, and remains engine-controlled. Other WebContext

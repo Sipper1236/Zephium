@@ -41,14 +41,32 @@ test("the dialog lists the sites with what each holds", async () => {
     .toHaveTextContent("Cookies and site data");
   await expect.element(dialog.getByRole("listitem").nth(1)).toHaveTextContent("Cookies");
   await expect.element(dialog.getByRole("listitem").nth(2)).toHaveTextContent("Site data");
-  expect(dialog.element().textContent).not.toContain("Only sites that stored cookies");
+  expect(dialog.element().textContent).not.toContain("Some site data may not appear here.");
 });
 
 test("a list the engine can only give in part says so", async () => {
   listing(true);
   const dialog = await open();
   await expect.element(dialog.getByText("example.com")).toBeVisible();
-  expect(dialog.element().textContent).toContain("Only sites that stored cookies are listed here.");
+  expect(dialog.element().textContent).toContain("Some site data may not appear here.");
+});
+
+test("an empty partial list does not claim there is no stored site data", async () => {
+  native.call.mockResolvedValueOnce({ kind: "sites", sites: [], partial: true });
+  const dialog = await open();
+  await expect.element(dialog.getByText("No sites to show")).toBeVisible();
+  expect(dialog.element().textContent).not.toContain("No site data");
+});
+
+test("an unavailable site removal keeps its row and explains the refusal", async () => {
+  listing(true);
+  native.call.mockResolvedValueOnce({ kind: "error", error: "unavailable" });
+  const dialog = await open();
+  await dialog.getByRole("button", { name: "Remove data for example.com" }).click();
+  await expect
+    .element(page.getByRole("alert"))
+    .toHaveTextContent("Clearing site data isn't available right now.");
+  await expect.element(dialog.getByRole("listitem")).toHaveLength(3);
 });
 
 test("searching narrows the list and a miss says so", async () => {

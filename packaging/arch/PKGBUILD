@@ -1,7 +1,7 @@
 # Build a native package from a local Zephium checkout. See docs/linux.md.
 pkgname=zephium
 pkgver=1.0.3
-pkgrel=3
+pkgrel=4
 pkgdesc='A private browser and work environment using WebKitGTK'
 arch=('x86_64' 'aarch64')
 url='https://zephium.app'
@@ -20,8 +20,10 @@ sha256sums=()
 
 build() {
   cd "$startdir/../.."
+  local cargo_target_dir="${CARGO_TARGET_DIR:-target}"
+  [[ "$cargo_target_dir" = /* ]] || cargo_target_dir="$PWD/$cargo_target_dir"
   pnpm install --frozen-lockfile --config.engine-strict=true
-  pnpm --dir desktop exec tauri build --no-bundle -- --locked
+  CARGO_TARGET_DIR="$cargo_target_dir" pnpm --dir desktop exec tauri build --no-bundle -- --locked
 }
 
 check() {
@@ -33,7 +35,9 @@ check() {
 
 package() {
   cd "$startdir/../.."
-  install -Dm755 target/release/zephium-desktop "$pkgdir/usr/bin/zephium-desktop"
+  local cargo_target_dir="${CARGO_TARGET_DIR:-target}"
+  [[ "$cargo_target_dir" = /* ]] || cargo_target_dir="$PWD/$cargo_target_dir"
+  install -Dm755 "$cargo_target_dir/release/zephium-desktop" "$pkgdir/usr/bin/zephium-desktop"
   install -Dm644 packaging/arch/zephium.desktop \
     "$pkgdir/usr/share/applications/app.zephium.desktop"
   install -Dm644 desktop/icons/128x128.png \

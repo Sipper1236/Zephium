@@ -23,7 +23,7 @@
   let view = $state.raw<View>({ state: "loading" });
   let query = $state("");
   let removing = $state<string | null>(null);
-  let failure = $state<{ site: string | null } | null>(null);
+  let failure = $state<{ site: string | null; unavailable: boolean } | null>(null);
   let confirmingAll = $state(false);
   let clearingAll = $state(false);
   let opener: HTMLElement | null = null;
@@ -61,7 +61,7 @@
     const outcome = await forgetSite(profile, site);
     removing = null;
     if (outcome !== "cleared") {
-      failure = { site };
+      failure = { site, unavailable: outcome === "unavailable" };
       return;
     }
     if (view.state === "ready")
@@ -77,7 +77,7 @@
     clearingAll = false;
     confirmingAll = false;
     if (outcome === "cleared") await load();
-    else failure = { site: null };
+    else failure = { site: null, unavailable: outcome === "unavailable" };
   }
 
   function kind(site: SiteDataView): string {
@@ -106,7 +106,7 @@
     >
       <Dialog.Title class="settings-dialog-title">{field.label()}</Dialog.Title>
       <Dialog.Description class="settings-dialog-description"
-        >{m.privacy_sites_description()}{#if view.state === "ready" && view.partial}
+        >{m.privacy_sites_description()}{#if view.state === "ready" && view.partial && view.sites.length > 0}
           {m.privacy_sites_partial()}{/if}</Dialog.Description
       >
       <div class="body">
@@ -118,7 +118,10 @@
             <Button onclick={() => void load()}>{m.surface_retry()}</Button>
           </div>
         {:else if view.sites.length === 0}
-          <EmptyState title={m.privacy_sites_empty()} description={m.privacy_sites_empty_help()} />
+          <EmptyState
+            title={view.partial ? m.privacy_sites_empty_partial() : m.privacy_sites_empty()}
+            description={view.partial ? m.privacy_sites_partial() : m.privacy_sites_empty_help()}
+          />
         {:else}
           <SearchField
             label={m.privacy_sites_search()}
@@ -148,9 +151,13 @@
           {/if}
         {/if}
         {#if failure}<p class="error" role="alert">
-            {failure.site === null
-              ? m.privacy_clear_failed()
-              : m.privacy_sites_remove_failed({ site: failure.site })}
+            {failure.unavailable
+              ? failure.site === null
+                ? m.privacy_clear_unavailable()
+                : m.site_data_unavailable()
+              : failure.site === null
+                ? m.privacy_clear_failed()
+                : m.privacy_sites_remove_failed({ site: failure.site })}
           </p>{/if}
         {#if confirmingAll}<p class="status">{m.privacy_sites_remove_all_confirm()}</p>{/if}
       </div>

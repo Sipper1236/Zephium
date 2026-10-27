@@ -9,7 +9,7 @@
   let request = $derived(clearRequest.pending());
   let host = $derived(request?.host ?? "");
   let pending = $state(false);
-  let failure = $state<"failed" | "private" | null>(null);
+  let failure = $state<"failed" | "private" | "unavailable" | null>(null);
 
   async function clear() {
     const target = request;
@@ -49,7 +49,9 @@
     {#if failure}<p class="error" role="alert">
         {failure === "private"
           ? m.privacy_clear_private()
-          : m.site_data_clear_failed({ site: host })}
+          : failure === "unavailable"
+            ? m.site_data_unavailable()
+            : m.site_data_clear_failed({ site: host })}
       </p>{/if}
     <footer>
       <Button disabled={pending} onclick={() => clearRequest.dismiss()}>{m.action_cancel()}</Button>

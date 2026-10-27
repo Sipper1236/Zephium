@@ -83,9 +83,13 @@ export const setAvatar = async (id: string, avatar: AvatarDraft) =>
 /** Deletion settles once its native and durable phases both finish. */
 export const remove = async (id: string) => {
   const result = await settle(commands.profilesDelete(id), 30_000);
-  const removed = applied(result) || result.outcome === "deferred";
-  if (removed) forgetDrafts(id);
-  return removed;
+  if (applied(result)) {
+    forgetDrafts(id);
+    return "removed";
+  }
+  // A lost admission reply also leaves it unknown whether deletion started.
+  if (result.outcome === "deferred" || result.outcome === "failed") return "unconfirmed";
+  return "failed";
 };
 
 export type PhotoPick = { token: string } | "cancelled" | "unsupported" | "unavailable";

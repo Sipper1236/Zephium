@@ -218,7 +218,7 @@ pub(super) fn same_address(reported: &str, page_url: &str) -> bool {
 /// the watch, or the host, busy.
 pub(super) const MAX_WATCH_RUNS: u8 = 6;
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 mod supported {
     use super::*;
     use crate::host::EngineHost;
@@ -410,7 +410,7 @@ mod supported {
 #[cfg(all(feature = "agentic-browser", target_os = "macos"))]
 pub(super) use supported::{rasterize, watch};
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 impl super::EngineHost {
     pub(crate) fn discover_favicon(&mut self, _id: zephium_core::ids::ItemId) {}
     pub(crate) fn rasterize_favicon(&mut self, _id: zephium_core::ids::ItemId, _url: String) {}

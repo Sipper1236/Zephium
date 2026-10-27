@@ -32,6 +32,7 @@ vi.mock("$shared/ipc/bindings", async () => {
             entries: downloads(),
             next: null,
             supported: true,
+            can_pause_resume: true,
           }
         : { kind: "applied" as const },
     runCommand: native.run,

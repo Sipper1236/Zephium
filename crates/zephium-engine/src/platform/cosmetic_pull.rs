@@ -144,3 +144,52 @@ mod windows {
 }
 #[cfg(target_os = "windows")]
 pub(crate) use windows::evaluate;
+
+#[cfg(all(unix, not(target_os = "macos"), not(target_os = "windows")))]
+mod unix {
+    use super::MAX_RESULT_BYTES;
+    use javascriptcore::ValueExt;
+    use std::cell::RefCell;
+    use webkit2gtk::WebViewExt;
+    use wry::WebViewExtUnix;
+
+    const OBSERVATION_WORLD: &str = "zephium-observation";
+
+    /// Runs a fixed host observation in a private JavaScriptCore world. The
+    /// callers construct bounded reports before returning a string. The
+    /// native callback rejects oversize results before passing them to the
+    /// host; page-world globals cannot replace this world's intrinsics.
+    pub(crate) fn evaluate(
+        view: &wry::WebView,
+        expression: &str,
+        done: impl FnOnce(Option<String>) + Send + 'static,
+    ) -> bool {
+        let native = view.webview();
+        let body = format!("return await ({expression});");
+        let pending = RefCell::new(Some(done));
+        native.call_async_javascript_function(
+            &body,
+            None,
+            Some(OBSERVATION_WORLD),
+            None,
+            None::<&webkit2gtk::gio::Cancellable>,
+            move |result| {
+                let Some(done) = pending.borrow_mut().take() else {
+                    return;
+                };
+                let text = result.ok().and_then(|value| {
+                    if !value.is_string() {
+                        return None;
+                    }
+                    let text = value.to_str().to_string();
+                    (text.len() <= MAX_RESULT_BYTES).then_some(text)
+                });
+                done(text);
+            },
+        );
+        true
+    }
+}
+
+#[cfg(all(unix, not(target_os = "macos"), not(target_os = "windows")))]
+pub(crate) use unix::evaluate;

@@ -830,6 +830,14 @@ impl EngineHost {
         ) {
             return;
         }
+        #[cfg(target_os = "linux")]
+        if self.linux_browsing_data_fence.active_for(profile) {
+            // An earlier native data call can still hold the manager or
+            // start a removal from its fetch callback. Keep the tombstone and
+            // allow a retry after that operation has actually settled.
+            completion.finish(zephium_core::ports::engine::ProfileDataErasureOutcome::Failed);
+            return;
+        }
         self.forget_discarded_state(profile, None);
         #[cfg(all(
             feature = "agentic-browser",

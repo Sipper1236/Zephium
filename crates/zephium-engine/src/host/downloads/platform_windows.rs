@@ -22,6 +22,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
     GA_ROOT, SW_SHOWNORMAL,
 };
 
+pub(super) const CAN_PAUSE_RESUME: bool = true;
+
 #[derive(Clone)]
 pub(super) struct Native {
     operation: ICoreWebView2DownloadOperation,

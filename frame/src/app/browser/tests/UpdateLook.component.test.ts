@@ -35,8 +35,21 @@ vi.mock("$shared/ipc/bindings", async () => {
     settingSet: async () => ({ accepted: true, operation_id: null }),
     downloadCall: async (_profile: string, call: DownloadCall) =>
       call.kind === "updates"
-        ? { kind: "updates" as const, entries: [receiving], removed: [], cleanup }
-        : { kind: "page" as const, entries: [receiving], next: null, supported: true, cleanup },
+        ? {
+            kind: "updates" as const,
+            entries: [receiving],
+            removed: [],
+            cleanup,
+            can_pause_resume: true,
+          }
+        : {
+            kind: "page" as const,
+            entries: [receiving],
+            next: null,
+            supported: true,
+            cleanup,
+            can_pause_resume: true,
+          },
     runCommand: async () => ({ accepted: true, operation_id: null }),
     toolsMenuPopup: async () => true,
     updateHighlights: async () => ({

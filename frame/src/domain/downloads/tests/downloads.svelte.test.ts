@@ -52,13 +52,16 @@ beforeEach(() => {
 test("the status indicator reads a bounded snapshot on subscribe and ignores another profile", async () => {
   host.call.mockResolvedValue({
     kind: "updates",
+    can_pause_resume: true,
     cleanup: { running: false, error: null },
     entries: [entry],
     removed: [],
   });
   const { DownloadSession } = await import("../downloads.svelte");
   const session = new DownloadSession(profile);
+  expect(session.canPauseResume).toBe(false);
   await session.start(false);
+  expect(session.canPauseResume).toBe(true);
   expect(host.call).toHaveBeenCalledTimes(1);
   host.listener?.({ payload: { profile: "other" } });
   expect(host.call).toHaveBeenCalledTimes(1);
@@ -66,6 +69,7 @@ test("the status indicator reads a bounded snapshot on subscribe and ignores ano
   await vi.waitFor(() => expect(session.entries).toHaveLength(1));
   expect(host.call).toHaveBeenCalledWith(profile, { kind: "updates" });
   session.stop();
+  expect(session.canPauseResume).toBe(false);
 });
 
 test("a late history page cannot roll back newer native progress", async () => {
@@ -75,6 +79,7 @@ test("a late history page cannot roll back newer native progress", async () => {
       ? page.promise
       : Promise.resolve({
           kind: "updates",
+          can_pause_resume: true,
           cleanup: { running: false, error: null },
           entries: [{ ...entry, revision: "00000002", received: "80" }],
           removed: [],
@@ -86,6 +91,7 @@ test("a late history page cannot roll back newer native progress", async () => {
   await session.refresh();
   page.resolve({
     kind: "page",
+    can_pause_resume: true,
     cleanup: { running: false, error: null },
     entries: [entry],
     next: null,
@@ -102,6 +108,7 @@ test("a removal cannot be resurrected by an older in-flight history page", async
       ? page.promise
       : Promise.resolve({
           kind: "updates",
+          can_pause_resume: true,
           cleanup: { running: false, error: null },
           entries: [],
           removed: [entry.id],
@@ -113,6 +120,7 @@ test("a removal cannot be resurrected by an older in-flight history page", async
   await session.refresh();
   page.resolve({
     kind: "page",
+    can_pause_resume: true,
     cleanup: { running: false, error: null },
     entries: [entry],
     next: null,
@@ -131,6 +139,7 @@ test("a stopped profile ignores an outstanding native response", async () => {
   session.stop();
   page.resolve({
     kind: "page",
+    can_pause_resume: true,
     cleanup: { running: false, error: null },
     entries: [entry],
     next: null,
@@ -138,6 +147,7 @@ test("a stopped profile ignores an outstanding native response", async () => {
   });
   await loading;
   expect(session.entries).toHaveLength(0);
+  expect(session.canPauseResume).toBe(false);
 });
 
 test("a download started during a history read survives an older empty page", async () => {
@@ -147,6 +157,7 @@ test("a download started during a history read survives an older empty page", as
       ? page.promise
       : Promise.resolve({
           kind: "updates",
+          can_pause_resume: true,
           cleanup: { running: false, error: null },
           entries: [entry],
           removed: [],
@@ -158,6 +169,7 @@ test("a download started during a history read survives an older empty page", as
   await session.refresh();
   page.resolve({
     kind: "page",
+    can_pause_resume: true,
     cleanup: { running: false, error: null },
     entries: [],
     next: null,
@@ -174,6 +186,7 @@ test("cleanup failures remain visible without hiding history and retries request
         ? { kind: "accepted" }
         : {
             kind: "updates",
+            can_pause_resume: true,
             entries: [entry],
             removed: [],
             cleanup: { running: false, error: "changed_file" },
@@ -197,6 +210,7 @@ test("late history cannot erase a newer cleanup failure", async () => {
       ? page.promise
       : Promise.resolve({
           kind: "updates",
+          can_pause_resume: true,
           entries: [],
           removed: [],
           cleanup: { running: false, error: "destination" },
@@ -208,6 +222,7 @@ test("late history cannot erase a newer cleanup failure", async () => {
   await session.refresh();
   page.resolve({
     kind: "page",
+    can_pause_resume: true,
     entries: [],
     next: null,
     supported: true,

@@ -49,6 +49,7 @@ mod page_permissions;
 ))]
 pub(crate) mod page_reader;
 mod permits;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 mod popup_sites;
 mod profiles;
 mod resources;
@@ -185,6 +186,7 @@ struct ObservedView {
     // reports are ignored.
     favicon_watch: Cell<u64>,
     // The media watch's generation, and whether it is running.
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     media_watch: Cell<(u64, bool)>,
     replay_safety: Rc<discard::ReplaySafety>,
     discard_probe_lease: std::cell::RefCell<Option<discard::ProbeLease>>,
@@ -573,6 +575,7 @@ pub(crate) struct EngineHost {
     /// views already open without touching them.
     focus_gate: focus::SharedFocusGate,
     blocker_sites: HashMap<ProfileId, content_styles::SitePreferencesSlot>,
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     popup_sites: HashMap<ProfileId, Rc<popup_sites::PopupSites>>,
     /// Certificates people chose to continue past, per profile, until quit.
     #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -698,6 +701,8 @@ pub(crate) struct EngineHost {
     linux_data_managers: HashMap<ProfileId, Vec<webkit2gtk::WebsiteDataManager>>,
     #[cfg(all(unix, not(target_os = "macos")))]
     linux_unverifiable_data_managers: HashSet<ProfileId>,
+    #[cfg(target_os = "linux")]
+    linux_browsing_data_fence: browsing_data::LinuxBrowsingDataFence,
     // Wry's WebContext is only a data-path holder on Windows. Reusing the
     // actual environment is what keeps one browser/network process group per
     // profile instead of creating one per tab.

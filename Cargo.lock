@@ -7693,6 +7693,7 @@ dependencies = [
  "flate2",
  "gtk",
  "image",
+ "javascriptcore-rs",
  "libc",
  "objc2",
  "objc2-app-kit",

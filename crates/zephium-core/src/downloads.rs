@@ -448,12 +448,15 @@ pub enum DownloadResponse {
     Updates {
         entries: Vec<DownloadView>,
         removed: Vec<String>,
+        /// The native transport can stop and retain a transfer for continuation.
+        can_pause_resume: bool,
         cleanup: DownloadCleanup,
     },
     Page {
         entries: Vec<DownloadView>,
         next: Option<String>,
         supported: bool,
+        can_pause_resume: bool,
         cleanup: DownloadCleanup,
     },
     Preferences {

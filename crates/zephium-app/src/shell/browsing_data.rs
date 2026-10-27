@@ -24,7 +24,7 @@ use zephium_ipc::{
 /// The parts of one clear still running. The last to settle answers.
 struct Join {
     remaining: usize,
-    cleared: bool,
+    failure: Option<BrowsingDataError>,
     done: Option<BrowsingDataCompletion>,
 }
 
@@ -32,24 +32,27 @@ impl Join {
     fn new(parts: usize, done: BrowsingDataCompletion) -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(Self {
             remaining: parts,
-            cleared: true,
+            failure: None,
             done: Some(done),
         }))
     }
 
-    fn settle(join: &Arc<Mutex<Self>>, cleared: bool) {
+    fn settle(join: &Arc<Mutex<Self>>, result: Result<(), BrowsingDataError>) {
         let mut state = join.lock().unwrap_or_else(|error| error.into_inner());
-        state.cleared &= cleared;
+        if let Err(error) = result {
+            if state.failure.is_none() || error == BrowsingDataError::Failed {
+                state.failure = Some(error);
+            }
+        }
         state.remaining = state.remaining.saturating_sub(1);
         if state.remaining > 0 {
             return;
         }
-        if let Some(done) = state.done.take() {
-            done.finish(if state.cleared {
-                BrowsingDataResponse::Cleared
-            } else {
-                error(BrowsingDataError::Failed)
-            });
+        let done = state.done.take();
+        let failure = state.failure;
+        drop(state);
+        if let Some(done) = done {
+            done.finish(failure.map_or(BrowsingDataResponse::Cleared, error));
         }
     }
 }
@@ -223,7 +226,14 @@ impl Shell {
                 partition,
                 EngineDataCall::Clear { kinds, since },
                 EngineDataCompletion::new(move |reply| {
-                    Join::settle(&settled, reply == EngineDataReply::Cleared)
+                    Join::settle(
+                        &settled,
+                        match reply {
+                            EngineDataReply::Cleared => Ok(()),
+                            EngineDataReply::Failed(why) => Err(failure(why)),
+                            EngineDataReply::Sites { .. } => Err(BrowsingDataError::Failed),
+                        },
+                    )
                 }),
             );
         }
@@ -236,7 +246,12 @@ impl Shell {
                 partition,
                 call,
                 DownloadCompletion::new(move |response| {
-                    Join::settle(&settled, matches!(response, DownloadResponse::Applied))
+                    Join::settle(
+                        &settled,
+                        matches!(response, DownloadResponse::Applied)
+                            .then_some(())
+                            .ok_or(BrowsingDataError::Failed),
+                    )
                 }),
             );
         }
@@ -253,7 +268,9 @@ impl Shell {
                 crate::api::HistoryCompletion::new(move |response| {
                     Join::settle(
                         &settled,
-                        matches!(response, HistoryResponse::Removed { .. }),
+                        matches!(response, HistoryResponse::Removed { .. })
+                            .then_some(())
+                            .ok_or(BrowsingDataError::Failed),
                     )
                 }),
             );

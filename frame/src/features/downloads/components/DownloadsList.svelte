@@ -229,7 +229,7 @@
                 onclick={() => void session.perform({ kind: "discard", id: entry.id })}
                 >{m.download_discard()}</Button
               >{/if}
-            {#if entry.state === "receiving"}<IconButton
+            {#if entry.state === "receiving" && session.canPauseResume}<IconButton
                 icon={PauseIcon}
                 label={m.download_pause()}
                 size={14}
@@ -237,7 +237,7 @@
                 disabled={session.busy}
                 onclick={() => void session.perform({ kind: "pause", id: entry.id })}
               />{/if}
-            {#if entry.state === "paused"}<Button
+            {#if entry.state === "paused" && session.canPauseResume}<Button
                 size="compact"
                 variant="secondary"
                 disabled={session.busy}

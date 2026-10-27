@@ -33,7 +33,7 @@
   let range = $state<BrowsingDataRange>("hour");
   let kinds = $state<ClearKinds>({ history: true, cookies: true, cache: true, downloads: false });
   let pending = $state(false);
-  let failure = $state<"failed" | "private" | null>(null);
+  let failure = $state<"failed" | "private" | "unavailable" | null>(null);
   let cleared = $state(false);
   let opener: HTMLElement | null = null;
   let chosen = $derived(Object.values(kinds).some(Boolean));
@@ -108,7 +108,11 @@
             {/each}
           </div>
           {#if failure}<p class="result error" role="alert">
-              {failure === "private" ? m.privacy_clear_private() : m.privacy_clear_failed()}
+              {failure === "private"
+                ? m.privacy_clear_private()
+                : failure === "unavailable"
+                  ? m.privacy_clear_unavailable()
+                  : m.privacy_clear_failed()}
             </p>{/if}
         </div>
         <footer>

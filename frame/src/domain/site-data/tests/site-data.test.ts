@@ -26,18 +26,22 @@ test("a clear sends the range and exactly the chosen kinds for the given profile
   });
 });
 
-test("an engine that did not finish, a refusal and a lost call are all failures", async () => {
+test("an engine that did not finish or returned an invalid reply fails", async () => {
   for (const response of [
     { kind: "error", error: "failed" },
-    { kind: "error", error: "unavailable" },
     { kind: "error", error: "invalid" },
     { kind: "sites", sites: [], partial: false },
   ] satisfies BrowsingDataResponse[]) {
     native.call.mockResolvedValueOnce(response);
     expect(await clearBrowsingData(profile, "hour", kinds)).toBe("failed");
   }
+});
+
+test("an unavailable engine or lost call remains unavailable", async () => {
+  native.call.mockResolvedValueOnce({ kind: "error", error: "unavailable" });
+  expect(await clearBrowsingData(profile, "hour", kinds)).toBe("unavailable");
   native.call.mockRejectedValueOnce(new Error("offline"));
-  expect(await clearBrowsingData(profile, "hour", kinds)).toBe("failed");
+  expect(await clearBrowsingData(profile, "hour", kinds)).toBe("unavailable");
 });
 
 test("a private window says it has nothing to clear", async () => {

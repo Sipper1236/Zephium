@@ -9,7 +9,7 @@ pub use agent_context_port::{
     any(target_os = "macos", target_os = "windows")
 ))]
 pub use agent_context_port::{work_browser_monotonic_deadline, work_browser_monotonic_now};
-#[cfg(any(target_os = "macos", target_os = "windows", test))]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux", test))]
 mod data_kinds;
 #[cfg(all(target_os = "macos", feature = "native-agentic-work-resource-probe"))]
 mod diagnostics;
@@ -2257,9 +2257,12 @@ impl Engine for WebviewEngine {
         profile: ProfileId,
         origins: Vec<zephium_core::permissions::PageOrigin>,
     ) {
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         let _ = self.run(move || {
             let _ = host::try_with(move |host| host.set_popup_sites(profile, origins));
         });
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        let _ = (profile, origins);
     }
     fn site_permissions(
         &self,
@@ -2297,7 +2300,7 @@ impl Engine for WebviewEngine {
         call: zephium_core::browsing_data::EngineDataCall,
         completion: zephium_core::browsing_data::EngineDataCompletion,
     ) {
-        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
         {
             if !lock_retirement_gate(&self.retirement).profile_is_active(partition.profile()) {
                 completion.finish(zephium_core::browsing_data::EngineDataReply::Failed(
@@ -2313,7 +2316,7 @@ impl Engine for WebviewEngine {
                 });
             });
         }
-        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
         {
             let _ = (partition, call);
             completion.finish(zephium_core::browsing_data::EngineDataReply::Failed(

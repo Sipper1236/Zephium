@@ -151,7 +151,7 @@
         >
       </div>
     {:else if current.state === "pending" || current.state === "receiving" || current.state === "paused"}
-      {#if current.state === "receiving"}<IconButton
+      {#if current.state === "receiving" && session.canPauseResume}<IconButton
           icon={PauseIcon}
           label={m.download_pause()}
           size={13}

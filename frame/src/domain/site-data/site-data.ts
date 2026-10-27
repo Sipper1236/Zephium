@@ -16,7 +16,7 @@ export type ClearKinds = {
 };
 
 /** `private` means the window keeps nothing to clear. */
-export type ClearOutcome = "cleared" | "private" | "failed";
+export type ClearOutcome = "cleared" | "private" | "unavailable" | "failed";
 
 export type SiteList = {
   sites: SiteDataView[];
@@ -34,7 +34,11 @@ async function call(profile: string, request: BrowsingDataCall): Promise<Browsin
 
 function outcome(response: BrowsingDataResponse): ClearOutcome {
   if (response.kind === "cleared") return "cleared";
-  return response.kind === "error" && response.error === "private" ? "private" : "failed";
+  if (response.kind === "error") {
+    if (response.error === "private") return "private";
+    if (response.error === "unavailable") return "unavailable";
+  }
+  return "failed";
 }
 
 export async function clearBrowsingData(

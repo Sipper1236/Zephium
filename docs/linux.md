@@ -91,8 +91,36 @@ without an implemented origin-labelled broker. Automatic picture-in-picture
 and fullscreen lifecycle behavior are not qualified on Linux. Do not infer
 support for these surfaces from their availability in system WebKitGTK.
 
-Native download resume is unsupported. Every download requires a save dialog,
-including when automatic saving is selected in preferences, because WebKitGTK
+Favicon discovery and rasterization use a private WebKitGTK JavaScript world
+and the committed view's navigation epoch. Browsing-data operations use the
+exact live `WebsiteDataManager` attached to the requested profile. Cache-only
+clearing works with or without a date range. On WebKitGTK 2.54, site listings
+are partial and site-data clears and removals return unavailable: that runtime
+cannot address origin-private filesystem data through its public data API. The
+adapter has a path for WebKitGTK 2.56's filesystem-data flag, but that path
+still needs native qualification. Date-limited site-data clears remain refused
+because WebKitGTK cannot clear cookies by age. WebKit can group subdomains in
+one record, so a request for a narrower host is refused when a broader record
+could include other sites. Large listings are marked partial; removal refuses
+an oversized record set. Profiles with no live native manager return
+unavailable.
+
+On WebKitGTK 2.54, deleting a profile whose native data manager has been used
+in the current process cannot yet be verified, so deletion stays pending rather
+than claiming the data is gone. Zephium retries journaled deletions on restart;
+successful recovery depends on the profile's data being removable. An in-flight
+browsing-data request also holds deletion until its native callback completes.
+
+Linux does not yet expose the detailed media player controls or qualified
+popup policy that Zephium has on Windows and macOS. WebKitGTK reports whether a
+view is playing audio, but that signal alone cannot identify or control the
+active media element. Its popup API does not identify the initiating frame's
+origin, so it cannot safely enforce the existing origin allowlist.
+
+Native download pause and resume are unsupported. The download controls keep
+cancellation available and omit Pause and Resume on Linux. Every download
+requires a save dialog, including when automatic saving is selected in
+preferences, because WebKitGTK
 does not expose trustworthy initiation evidence. Destination filesystems must
 support exclusive rename and the XDG origin extended attribute; a failure to
 preserve the protection metadata rejects publication. Executable content is
@@ -108,7 +136,10 @@ adapters and their remaining qualification or implementation work:
 | Window composition, tabs, split stage and find | GTK/WebKitGTK adapters exist; exercise native resizing, focus, drag/drop and page flows on both displays. |
 | Launcher | X11 grabs and Wayland portal registration, persisted recording/rebinding and native status readback. Layout-safe global text keys remain unavailable on X11; Wayland approval depends on the compositor. |
 | Open at Login | XDG Autostart with system/user precedence and readback. |
-| Downloads | Native WebKitGTK transport and GTK consent per transfer use the shared coordinator, Store/recovery, identity-checked staging, exclusive publication and XDG origin metadata. Native resume and initial blank-popup download handoff remain unsupported. |
+| Favicons | Isolated WebKitGTK observation and fixed-size rasterization, bound to the committed document. |
+| Browsing data | Profile-scoped cache clearing and partial site listing work on 2.54. Complete site-data removal needs the WebKitGTK 2.56 filesystem-data API and native qualification; dated site-data removal and removal of a host inside a broader grouped record are refused. |
+| Media and popups | Audio-state readback exists; detailed player actions and origin-authenticated popup policy remain unsupported. |
+| Downloads | Native WebKitGTK transport and GTK consent per transfer use the shared coordinator, Store/recovery, identity-checked staging, exclusive publication and XDG origin metadata. Native pause/resume and initial blank-popup download handoff remain unsupported; controls use native capability readback. |
 | Extensions | WebKitGTK has no equivalent to Chromium's native extension runtime or macOS WKWebExtension. Full support needs a new runtime or a different Linux engine, with principal isolation and bounded messages; package verification alone does not execute extensions. |
 | Ask / Work browsing | Shared optional runtime compiles, but native reader, agent-context and retained-page adapters under `crates/zephium-engine/src/platform/linux/` remain unimplemented. |
 | Provider keys, account tokens and MCP credentials | System Secret Service vault using encrypted sessions, exact application namespaces and persistent collections. Requires an installed/unlocked service such as GNOME Keyring or KWallet; service failures never fall back to plaintext files. |
@@ -129,6 +160,22 @@ identity, separate profile storage, navigation ownership and acknowledged native
 teardown before the desktop can advertise these capabilities.
 
 ## Verification
+
+On 27 October 2026, the current x86_64 Arch `1.0.3-4` package passed an
+isolated release-1 install, release-4 upgrade and removal, packaged-resource
+and executable-identity checks, and 10-second startup probes on X11, headless
+Wayland and the live Hyprland session using disposable data. These checks used
+the host runtime libraries and do not establish full browser functionality or a
+clean distribution image. The checksum and detailed evidence are in
+[the handoff](linux-handoff.md).
+
+On 27 October 2026, an x86_64 Arch `1.0.3-3` package passed an isolated
+release-1 install, release-3 upgrade and removal, resource and executable
+identity checks, and 10-second X11 and headless Wayland startup probes. The
+freshly built executable also passed a 10-second startup probe on the current
+Hyprland v0.56.2 session with a disposable profile. That package was built
+before the browsing-data safety fix described above; rebuild it before
+distribution. The checks used host runtime libraries, not a clean Arch image.
 
 On 26 October 2026, the local x86_64 Arch `1.0.3-2` package was rebuilt with
 Rust 1.95.0, Node 24.18.0 and pnpm 11.17.0. It passed isolated installation,

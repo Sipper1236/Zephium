@@ -428,6 +428,7 @@ pub(crate) fn install(
             blocker_statistics: HashMap::new(),
             focus_gate: Default::default(),
             blocker_sites: HashMap::new(),
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
             popup_sites: HashMap::new(),
             #[cfg(any(target_os = "macos", target_os = "windows"))]
             certificate_exceptions: HashMap::new(),
@@ -507,6 +508,8 @@ pub(crate) fn install(
             linux_data_managers: HashMap::new(),
             #[cfg(all(unix, not(target_os = "macos")))]
             linux_unverifiable_data_managers: HashSet::new(),
+            #[cfg(target_os = "linux")]
+            linux_browsing_data_fence: Default::default(),
             #[cfg(target_os = "windows")]
             browser_version_observers: HashMap::new(),
             #[cfg(target_os = "windows")]

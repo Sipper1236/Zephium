@@ -2528,6 +2528,7 @@ impl EngineHost {
             #[cfg(any(target_os = "macos", target_os = "windows"))]
             automatic_pip_sequence: Rc::new(Cell::new(0)),
             favicon_watch: Cell::new(0),
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
             media_watch: Cell::new((0, false)),
             #[cfg(target_os = "windows")]
             _favicon_observer: favicon_observer,

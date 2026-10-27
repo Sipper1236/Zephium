@@ -28,13 +28,18 @@ const entry: DownloadView = {
   error: null,
 };
 
-function serving(initial: DownloadView, next: (call: DownloadCall) => DownloadView | null) {
+function serving(
+  initial: DownloadView,
+  next: (call: DownloadCall) => DownloadView | null,
+  canPauseResume = true,
+) {
   let current = initial;
   native.call.mockReset();
   native.call.mockImplementation(async (_profile: string, call: DownloadCall) => {
     if (call.kind === "updates")
       return {
         kind: "updates",
+        can_pause_resume: canPauseResume,
         cleanup: { running: false, error: null },
         entries: [current],
         removed: [],
@@ -42,6 +47,7 @@ function serving(initial: DownloadView, next: (call: DownloadCall) => DownloadVi
     if (call.kind === "list")
       return {
         kind: "page",
+        can_pause_resume: canPauseResume,
         cleanup: { running: false, error: null },
         entries: [current],
         next: null,
@@ -86,6 +92,17 @@ test("a download in flight offers Pause beside Cancel", async () => {
   expect(native.call).toHaveBeenCalledWith(profile, { kind: "pause", id: entry.id });
   await expect.element(page.getByText("Paused", { exact: true })).toBeVisible();
   await expect.element(page.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
+});
+
+test("a transfer without native pause support keeps Cancel and omits Pause", async () => {
+  serving(entry, () => null, false);
+  await render(DownloadStatus, { props: { profile, onopen: () => {} } });
+
+  await expect.element(page.getByText("setup.exe", { exact: true })).toBeVisible();
+  await expect.element(page.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
+  await expect
+    .element(page.getByRole("button", { name: "Pause", exact: true }))
+    .not.toBeInTheDocument();
 });
 
 test("the card sits flush with the column's edges, which the window already insets", async () => {

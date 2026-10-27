@@ -199,6 +199,31 @@ fn a_part_that_fails_fails_the_clear() {
 }
 
 #[test]
+fn an_unavailable_site_data_clear_reports_unavailable_after_other_parts_finish() {
+    let store = Arc::new(FakeStore::default());
+    let (mut shell, engine, _screen, _queue) = browsed(store);
+    let profile = focused_profile(&shell);
+
+    for why in [
+        EngineDataFailure::Unavailable,
+        EngineDataFailure::Unsupported,
+    ] {
+        set_reply(&engine, EngineDataReply::Failed(why));
+        let answer = dispatch(
+            &mut shell,
+            profile,
+            clear(Range::Everything, [false, true, false, true]),
+        );
+        assert_eq!(
+            answered(&answer),
+            BrowsingDataResponse::Error {
+                error: BrowsingDataError::Unavailable
+            }
+        );
+    }
+}
+
+#[test]
 fn a_clear_of_nothing_is_refused() {
     let store = Arc::new(FakeStore::default());
     let (mut shell, engine, _screen, _queue) = browsed(store);
