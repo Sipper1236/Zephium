@@ -35,11 +35,14 @@ These still need Linux implementations or qualification:
 - Persistent application credentials through Secret Service.
 - A qualified sandbox for Work command execution.
 
-The launcher shortcut recorder reports unsupported on Linux in this initial
-build path. X11 and Wayland registration still needs to be wired and qualified.
-Window behavior and other desktop integration also need testing across both
-compositor types. Linux onboarding stays resizable so Wayland can fit the
-window to displays smaller than the preferred size.
+At startup, Linux registers the configured launcher shortcut on X11 and starts
+the Wayland GlobalShortcuts portal worker after the main window is mapped.
+Settings reports the live registration state, but recording or rebinding
+shortcuts remains unsupported in this initial build path. Portal approval and
+behavior, and broader window and desktop integration, still need qualification
+on real compositors.
+Linux onboarding stays resizable so Wayland can fit the window to displays
+smaller than the preferred size.
 
 ## Targeted checks
 

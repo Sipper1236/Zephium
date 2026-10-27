@@ -8,9 +8,7 @@ use std::str::FromStr;
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
-use tauri::AppHandle;
-#[cfg(not(target_os = "linux"))]
-use tauri::Manager;
+use tauri::{AppHandle, Manager};
 #[cfg(not(target_os = "linux"))]
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 #[cfg(not(target_os = "linux"))]
@@ -409,11 +407,19 @@ pub fn open_accessibility_settings() {
 pub fn install(_app: &AppHandle, _keymap_override: Option<String>) {}
 
 #[cfg(target_os = "linux")]
-pub fn snapshot(_app: &AppHandle) -> LauncherTrigger {
+pub fn snapshot(app: &AppHandle) -> LauncherTrigger {
+    let registered = app
+        .try_state::<crate::linux_global_shortcuts::LinuxGlobalShortcuts>()
+        .is_some_and(|state| state.is_registered());
+    linux_snapshot(registered)
+}
+
+#[cfg(target_os = "linux")]
+fn linux_snapshot(registered: bool) -> LauncherTrigger {
     LauncherTrigger {
         shortcut: DEFAULT.into(),
         default_shortcut: DEFAULT.into(),
-        registered: false,
+        registered,
         editable: false,
         double_tap: DoubleTap::Off,
         double_tap_supported: false,
@@ -423,9 +429,14 @@ pub fn snapshot(_app: &AppHandle) -> LauncherTrigger {
 
 #[cfg(target_os = "linux")]
 pub fn set_shortcut(app: &AppHandle, _accelerator: &str) -> TriggerChange {
+    linux_rejected_shortcut_change(snapshot(app))
+}
+
+#[cfg(target_os = "linux")]
+fn linux_rejected_shortcut_change(trigger: LauncherTrigger) -> TriggerChange {
     TriggerChange::Rejected {
         reason: Rejection::Unsupported,
-        trigger: snapshot(app),
+        trigger,
     }
 }
 
@@ -483,5 +494,31 @@ mod tests {
         ] {
             assert_eq!(validate(taken), Err(Rejection::System), "{taken}");
         }
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod linux_tests {
+    use super::*;
+
+    #[test]
+    fn shortcut_status_reports_registration_and_editing_fails_closed() {
+        let trigger = linux_snapshot(false);
+        assert_eq!(trigger.shortcut, DEFAULT);
+        assert_eq!(trigger.default_shortcut, DEFAULT);
+        assert!(!trigger.registered);
+        assert!(!trigger.editable);
+        assert_eq!(trigger.double_tap, DoubleTap::Off);
+        assert!(!trigger.double_tap_supported);
+        assert!(!trigger.accessibility);
+
+        assert!(matches!(
+            linux_rejected_shortcut_change(linux_snapshot(true)),
+            TriggerChange::Rejected {
+                reason: Rejection::Unsupported,
+                trigger: rejected,
+            } if rejected.registered && rejected.shortcut == DEFAULT
+        ));
+        assert!(linux_snapshot(true).registered);
     }
 }
