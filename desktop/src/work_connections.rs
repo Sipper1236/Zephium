@@ -15,7 +15,6 @@ fn profile_of(expected: &str) -> Result<ProfileId, WorkError> {
         .ok_or(WorkError::Invalid)
 }
 
-
 fn admitted(
     caller: &WebviewWindow,
     app: &tauri::AppHandle,

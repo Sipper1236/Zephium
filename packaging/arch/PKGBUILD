@@ -6,7 +6,7 @@ pkgdesc='A private browser and work environment using WebKitGTK'
 arch=('x86_64' 'aarch64')
 url='https://zephium.app'
 license=('MPL-2.0' 'CC-BY-SA-3.0')
-depends=('webkit2gtk-4.1' 'gtk3' 'libayatana-appindicator' 'librsvg'
+depends=('webkit2gtk-4.1>=2.54.0' 'gtk3' 'libayatana-appindicator' 'librsvg'
          'openssl' 'sqlite' 'xdg-utils' 'gst-plugins-base' 'gst-plugins-good')
 makedepends=('rustup' 'nodejs-lts-krypton' 'pnpm' 'python' 'cmake' 'pkgconf'
              'desktop-file-utils')

@@ -201,8 +201,10 @@ Any change that breaks one of these invariants must fail review and release:
    fixed main label.
 5. Raw content permissions are denied by the pinned Wry permission callback.
    Privileged and agent downloads/new windows remain denied. Human macOS and
-   Windows tabs opt into the native download and new-tab brokers described below;
-   Linux retains denial. No new window is forwarded to an unmanaged OS browser.
+   Windows tabs opt into the native download and new-tab brokers described below.
+   Linux human tabs opt into the WebKitGTK download broker; context-only downloads
+   and initial blank-popup download handoff retain denial. No new window is
+   forwarded to an unmanaged OS browser.
    Linux additionally cancels file-chooser requests from both raw and privileged
    WebViews. macOS raw foreground views opt into a native upload picker bound to
    the exact view/navigation and labelled with WebKit's initiating-frame origin;
@@ -246,11 +248,10 @@ Any change that breaks one of these invariants must fail review and release:
    pass after the exact document reaches load completion. Rust accepts only an exact,
    canonical 32-by-32 RGBA raster for the current navigation epoch and origin; chrome
    paints that fixed raster without parsing a page-controlled image container.
-10. Linux is not a supported platform at launch: `run()` in `desktop/src/lib.rs` prints
-    that Zephium isn't available on Linux yet and exits with status 1 before any
-    runtime is touched. The Linux engine code stays in the tree and keeps the
-    admission described here, but none of it is exercised by a shipped build. On
-    Linux, browsing requires WebKitGTK 2.54.0 or newer. Older builds,
+10. Linux is an experimental source-build target with a local Arch packaging
+    recipe. The desktop starts through its GTK/WebKitGTK adapter and keeps the
+    admission described here. Official releases do not publish Linux installers.
+    Browsing requires WebKitGTK 2.54.0 or newer. Older builds,
     odd-minor development builds, and unrelated major lines fail closed. A
     newer stable even-minor WebKitGTK 2.x line is admitted with a visible
     unreviewed-runtime advisory rather than a numeric-version kill switch.
@@ -350,7 +351,8 @@ WKWebView/TCC check on the supported OS lines remains a release gate for the mac
 broker. Foreground human macOS tabs
 use the native download broker described below. Foreground human Windows views
 now opt into the WebView2 download adapter described below; privileged and agent
-downloads remain denied (Linux code also denies them, but Linux does not start). Windows Attachment Services and Mark-of-the-Web
+downloads remain denied. Human Linux views opt into the WebKitGTK adapter below.
+Windows Attachment Services and Mark-of-the-Web
 are implemented but await native Windows qualification. Linux also cancels privileged file-picker requests. Stable WebView2 exposes no supported file-chooser interception event, so a
 raw Windows file input remains an engine-owned, user-selected native upload surface and
 privileged Windows views have no equivalent native denial hook. This is an explicit
@@ -1455,19 +1457,31 @@ These inherited properties must not be overstated:
 - Persistent profiles have separate on-disk contexts. Private tabs in one profile share
   a single verified in-memory context, so their cookies/storage form one process-lifetime
   incognito session without sharing across profiles.
-- Download denial is installed once on each raw WebContext before its first load;
-  opening and closing tabs does not accumulate context-global denial callbacks.
+- A single download dispatcher is installed on each raw WebContext before its
+  first load. Only an opted-in human view can claim its own native transfer.
+  Missing-source and context-only transfers stop signal emission and cancel once;
+  unrelated view callbacks cannot claim or repeatedly cancel them. Opening and
+  closing tabs does not accumulate context-global denial callbacks.
+- The Linux download adapter retains the shared coordinator's profile, physical
+  view, navigation and presentation checks. Every transfer requires a native save
+  dialog because WebKitGTK does not expose trustworthy initiation evidence.
+  Staging files are identity-checked, publication uses exclusive rename, and
+  XDG origin metadata must be written successfully. Native resume and initial
+  blank-popup handoff remain unsupported. Executable content is rejected by the
+  download panel's Open action. See [linux.md](linux.md) for current limitations.
 - The current integration uses the GTK3/WebKit2GTK 4.1 bindings. Top-level cross-site
   process swapping reduces process reuse but is not WebKit full site isolation, does not
   promise a process per origin/frame, and remains engine-controlled. Other WebContext
   callbacks are context-global and require explicit single-owner lifetime management.
-- No Linux package is built or published: the release workflow produces macOS and
-  Windows installers only, and CI compiles and tests the Linux code on Ubuntu as a
-  source gate. The earlier Fedora RPM path and its real-WebProcess confinement CI
-  were removed with Linux support, so nothing here is runtime sandbox attestation.
-  A future Linux release must restore a package that carries a
-  `webkit2gtk4.1 >= 2.54.0` dependency, with runtime admission as the final gate, and
-  re-establish confinement evidence.
+- The local Arch recipe builds the current checkout and requires
+  `webkit2gtk-4.1>=2.54.0`; runtime admission remains the final gate. Official
+  releases still produce macOS and Windows installers only. Linux CI compiles
+  the desktop/shared engine and exercises isolated credential and X11/GTK tests.
+  A native fixture inspects an actual WebKitWebProcess's namespace, seccomp and
+  NoNewPrivs state and checks bounded isolated-world IPC. Those assertions do
+  not establish filesystem denial or seccomp filter provenance. The earlier
+  Fedora confinement CI has not been restored. Local package checks use the
+  host runtime libraries and do not qualify a clean distribution image.
 - **Release gates:** rerun the confinement probe through the packaged application on
   supported hosts and inspect its actual process tree. Add an in-renderer or
   equivalent-credential host-file denial probe and identify the filter policy before
@@ -1707,8 +1721,9 @@ The following are roadmap items or disabled backends, not current security guara
   WebView2 prompt are one-time decisions; the catalog behind `remember_enabled` stays
   off until the browser can list and revoke grants), and any permission beyond camera
   and microphone;
-- Linux as a supported platform: the code stays in the tree, but the app refuses to
-  start there;
+- Linux as a supported release platform: experimental source builds and local
+  Arch packaging are available, while the remaining native adapters and broader
+  distribution qualification are tracked in [linux.md](linux.md);
 - native Windows release qualification of downloads/protection,
   guaranteed malware detection, and automatic transfer resumption;
 - Chrome/Firefox extension compatibility beyond the subset in

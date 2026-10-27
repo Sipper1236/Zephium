@@ -3143,7 +3143,8 @@ a main-thread-retained, generation/attachment-checked WKWebView that is
 unpublished before release. On Windows, every fallible controller build owns a
 typed cleanup plan for the parent subclass, controller `Close`, and child HWND;
 unresolved steps return as retryable profile-attributed debt and consume native
-resource budget. On Linux (not shipped), context properties fail closed. Packaged real-OS hostile tests are still a
+resource budget. On experimental Linux source builds, context properties fail closed.
+Packaged real-OS hostile tests are still a
 release gate. Split-divider drag/drop indicators on Windows/Linux and per-view
 rounded corners remain later platform work (rounded corners are intentionally
 skipped on Windows for now).
@@ -3198,7 +3199,12 @@ path authority. A profile-scoped native WKDownload coordinator owns transfers,
 Store-backed metadata/preferences and bounded progress snapshots. Private transfers
 remain memory-only. Filesystem workers mediate staging, quarantine, exclusive
 publication and file-identity checks. Trusted UI actions carry download IDs;
-paths and native completions stay in Rust. Linux download adapters remain outstanding (Linux does not ship). Local-document viewing is outside this delivery's scope.
+paths and native completions stay in Rust. Experimental Linux builds use a native
+WebKitGTK transport and GTK save dialogs with the same coordinator, identity-checked
+staging, exclusive publication and XDG origin metadata. Native resume and initial
+blank-popup handoff remain unsupported; upload selection remains disabled on Linux.
+See [linux.md](linux.md) for the current adapter and qualification limits.
+Local-document viewing is outside this delivery's scope.
 
 ---
 

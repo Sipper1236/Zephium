@@ -21,7 +21,7 @@ PR. The order below reflects the existing draft and the new local preparation:
 | Step | Scope | Before submitting |
 | --- | --- | --- |
 | A: existing draft #221 | Experimental platform gates, Linux feature guards and shared engine fixes. | Refreshed to current `main`, head `5c8361fc`. Engine, platform-guard, format and desktop compile checks pass. Linked production build passed; X11 and 1024×640 Wayland startup probes passed. Ask before marking ready. |
-| B: WebView resize | `desktop/src/platform/linux.rs`; direct child allocation plus shrink/grow regression in the existing GTK native test. | Local branch `fix/linux-webview-resize`, commit `cf73e3b`. The consolidated native fixture has not been rerun. |
+| B: WebView resize | `desktop/src/platform/linux.rs`; direct child allocation plus shrink/grow regression in the existing GTK native test. | Local branch `fix/linux-webview-resize`, rebased onto #221 at `299eff37`. Native test compilation is in progress; qualify this branch's consolidated fixture on both displays before proposing it. |
 | C: startup probes | `scripts/ci/probe_linux_startup.py` and its tests. Preserve X11 authority when using a disposable HOME. | Local branch `test/linux-startup-probes`, commit `6bf4402`. These are new files upstream. Describe this as adding isolated startup probes, not fixing an existing probe. |
 | D: Arch recipe | `packaging/arch/PKGBUILD`, desktop entry and packaging ignore rules. | Depends on the platform gate and startup probe files because the recipe's check phase invokes them. Set version and release against the chosen upstream base. |
 | E: Open at Login | `desktop/src/login_item.rs` and `desktop/src/login_item/linux.rs`. | Explain XDG precedence, status readback and the user disable override. Keep engine and credential changes out of this patch. |
@@ -39,9 +39,10 @@ merge it wholesale. The small PR branches above use the refreshed upstream base.
 ## Details to get right in future descriptions
 
 - The current Arch recipe builds a local checkout. It is not an AUR source
-  package or an official Linux release. Its local `pkgrel=2` records this
+  package or an official Linux release. Its local `pkgrel=3` records this
   checkout's iterations; choose the version and release number for the actual
-  upstream submission.
+  upstream submission. Its WebKitGTK dependency must retain the runtime security
+  floor (`webkit2gtk-4.1>=2.54.0` in this revision).
 - The recipe installs three PNG icon sizes: 32, 128 and 256 pixels. It also
   installs the desktop entry, the main license, and three runtime legal files.
 - Autostart uses `$XDG_CONFIG_HOME/autostart/app.zephium.desktop`, falling back

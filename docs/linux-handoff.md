@@ -1,5 +1,52 @@
 # Linux/Arch port handoff
 
+## Resumed port work, 27 October 2026, 02:08 UTC
+
+The user asked to resume the port and continue until it is complete. This
+supersedes the historical pause below. Keep the agreed experimental WebKitGTK
+architecture and the explicit extension/Ask/native Work limitations. The user
+still wants approval before each additional upstream PR.
+
+Current changes and evidence from this resumed run:
+
+- Fixed the Settings date-test fixture to construct the calendar date in local
+  time. Its old UTC-midnight input represented August 18 in Halifax while the
+  assertion expected August 19. The original failure reproduced; the corrected
+  fixture passes in Halifax, UTC and UTC+14 without changing product formatting.
+- Frontend type checking, ESLint, Stylelint, Prettier and Knip passed. The default
+  parallel unit run passed 969 tests and timed out in the existing hostile
+  markdown test. A full serial rerun in Halifax passed all **970 tests** with
+  unchanged assertions/timeouts. The first serial attempt was interrupted and
+  is not counted as a completed run.
+- Both Connections browser component tests passed. Startup-probe unit tests
+  passed **7**, platform guard tests passed **4**, desktop-entry validation and
+  Rust formatting passed.
+- The Arch recipe now requires `webkit2gtk-4.1>=2.54.0`, matching runtime
+  admission. Shell syntax and generated source metadata were checked.
+- Updated `docs/security-model.md` and `docs/architecture.md` to describe current
+  Linux startup, downloads, local packaging and the exact limits of native
+  sandbox evidence. They previously still claimed Linux exited before startup
+  and lacked download transport.
+- Rebased the local one-file resize branch onto #221. Its new head is
+  `299eff37`; native test compilation is running. It has not been pushed or
+  submitted. This branch's results must remain separate from the full port.
+
+Next required checks are the consolidated native resize regression on X11 and
+Wayland, the full port's desktop unit/native suites, current strict primary-crate
+lint and boundary checks, a fresh release-3 build, and isolated package
+installation/upgrade/removal with startup checks against that exact artifact.
+Do not treat the earlier #221 binary as the rebuilt full port. It is preserved
+at `target/linux-handoff/pr221-zephium-desktop` with a SHA-256 receipt.
+
+New evidence is under `/home/rayyan/Zephium/target/linux-handoff/`:
+`resume-frame-check.log`, `resume-frame-unit-serial.log`,
+`resume-date-halifax-red.log`, `resume-date-timezones-green.log`,
+`resume-cli-component.log`, `resume-format-final.log`, and
+`resume-resize-build.log`. Exit receipts are saved for the completed long runs.
+The retained `run-native-qualification.py` runner reads a fresh Cargo artifact
+report and uses disposable profiles plus Xvfb or Weston, without rebuilding
+inside each native invocation.
+
 ## Draft #221 linked build qualification, 26 October 2026
 
 The user authorized resuming the #221 qualification. The production Tauri build

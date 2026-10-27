@@ -29,6 +29,8 @@ test("times read the way people say them", () => {
   expect(sinceLabel(String(now - 3_600_000), now)).toBe("today");
   expect(sinceLabel(String(now - 86_400_000), now)).toBe("yesterday");
   expect(sinceLabel(String(now - 3 * 86_400_000), now)).toBe("3 days ago");
-  expect(sinceLabel(String(Date.UTC(2026, 7, 19)), now)).toBe("Aug 19");
+  // Older timestamps are displayed in the user's local time zone.
+  const august19 = new Date(2026, 7, 19, 12).getTime();
+  expect(sinceLabel(String(august19), now)).toBe("Aug 19");
   expect(sinceLabel(null, now)).toBe("");
 });
