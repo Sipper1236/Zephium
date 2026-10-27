@@ -8,7 +8,9 @@ The refreshed draft allows experimental Linux source builds and keeps native
 features without Linux implementations unavailable. Its refreshed engine suite
 passes 387 tests with Rust 1.95.0. The larger local port has additional tests
 and features, so its 377-test result must stay separate from the PR's results.
-The draft still needs a linked desktop build and native startup qualification.
+The linked production Tauri build has now completed, and isolated X11/Xvfb and
+Wayland/Weston startup probes passed. The draft remains a draft until the user
+decides whether it is ready for review.
 
 ## Preliminary contribution order
 
@@ -18,7 +20,7 @@ PR. The order below reflects the existing draft and the new local preparation:
 
 | Step | Scope | Before submitting |
 | --- | --- | --- |
-| A: existing draft #221 | Experimental platform gates, Linux feature guards and shared engine fixes. | Refreshed to current `main`, head `5c8361fc`. Engine, platform-guard, format and desktop compile checks pass. Keep it draft until a linked build and native startup are qualified; ask before marking ready. |
+| A: existing draft #221 | Experimental platform gates, Linux feature guards and shared engine fixes. | Refreshed to current `main`, head `5c8361fc`. Engine, platform-guard, format and desktop compile checks pass. Linked production build passed; X11 and 1024×640 Wayland startup probes passed. Ask before marking ready. |
 | B: WebView resize | `desktop/src/platform/linux.rs`; direct child allocation plus shrink/grow regression in the existing GTK native test. | Local branch `fix/linux-webview-resize`, commit `cf73e3b`. The consolidated native fixture has not been rerun. |
 | C: startup probes | `scripts/ci/probe_linux_startup.py` and its tests. Preserve X11 authority when using a disposable HOME. | Local branch `test/linux-startup-probes`, commit `6bf4402`. These are new files upstream. Describe this as adding isolated startup probes, not fixing an existing probe. |
 | D: Arch recipe | `packaging/arch/PKGBUILD`, desktop entry and packaging ignore rules. | Depends on the platform gate and startup probe files because the recipe's check phase invokes them. Set version and release against the chosen upstream base. |

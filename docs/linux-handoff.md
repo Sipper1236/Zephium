@@ -1,5 +1,34 @@
 # Linux/Arch port handoff
 
+## Draft #221 linked build qualification, 26 October 2026
+
+The user authorized resuming the #221 qualification. The production Tauri build
+completed, producing `/home/rayyan/Zephium/target/release/zephium-desktop`
+(39 MiB). The linked binary then passed both isolated startup probes using
+disposable profiles:
+
+- X11 under Xvfb initialized its main window and stayed alive for five seconds.
+- Wayland under headless Weston at 1024×640 initialized its main window and
+  stayed alive for five seconds.
+
+The probe script was `scripts/ci/probe_linux_startup.py` from the local
+`test/linux-startup-probes` branch. The probe output reported success and exit
+status 0 for each backend. These results qualify basic linked startup and the
+narrow Wayland startup case; they do not verify physical compositor behavior,
+input, application workflows, or Windows parity.
+
+Draft PR #221 at
+https://github.com/zephium-browser/Zephium/pull/221 remains a draft. Its body
+now records the production build and both passing probes, with the linked
+build/startup checklist item checked. Do not mark the PR ready or open another
+PR without the user's request.
+
+The six-minute optimized Rust desktop compile emitted no new errors. Earlier
+dead-code/deprecation warnings, including a gated Work credential helper, are
+non-fatal and were already recorded on the PR. There was about 25 GiB free on
+`/home` during compilation. No package was installed and no user profile data
+was changed.
+
 ## Paused follow-up, 26 October 2026, 22:37 UTC
 
 The user asked to update this handoff and stop. **Stop here. Do not resume
