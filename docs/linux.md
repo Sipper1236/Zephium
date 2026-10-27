@@ -32,8 +32,10 @@ These still need Linux implementations or qualification:
 - Ask's native page reader and page assistant commands. These are reported as
   unavailable until the native reader is implemented.
 - Work's native browser adapters.
-- Persistent application credentials through Secret Service.
 - A qualified sandbox for Work command execution.
+
+Persistent application credentials are supported via FreeDesktop Secret Service
+(`org.freedesktop.secrets`).
 
 At startup, Linux registers the configured launcher shortcut on X11 and starts
 the Wayland GlobalShortcuts portal worker after the main window is mapped.
