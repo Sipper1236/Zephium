@@ -204,6 +204,17 @@ fn install_composition(
     let sized_chrome = chrome.clone();
     fixed.connect_size_allocate(move |_, allocation| {
         sized_chrome.set_size_request(allocation.width(), allocation.height());
+        // GtkFixed already allocated children from their previous request
+        // before this signal fired; set_size_request alone only takes effect
+        // on a subsequent layout pass. When the window size is already stable
+        // (such as initial window presentation), no further pass runs, leaving
+        // the chrome view stuck at 1x1. Directly allocate it to the container's
+        // bounds if its allocation does not yet match.
+        let current = sized_chrome.allocation();
+        if current.width() != allocation.width() || current.height() != allocation.height() {
+            let mut target = gtk::Allocation::new(0, 0, allocation.width(), allocation.height());
+            sized_chrome.size_allocate(&mut target);
+        }
     });
     fixed.show_all();
 
@@ -731,6 +742,18 @@ mod shortcut_tests {
         assert!(adapter.contains("release_after_repeat_grace"));
         assert!(adapter.contains("connect_focus_out_event"));
         assert!(adapter.contains("clear_if_application_unfocused_after_grace"));
+    }
+
+    #[test]
+    fn chrome_composition_allocates_bounds_on_size_allocate() {
+        let source = include_str!("linux.rs");
+        let handler = source
+            .split("fixed.connect_size_allocate(")
+            .nth(1)
+            .and_then(|source| source.split("fixed.show_all()").next())
+            .expect("fixed size_allocate handler");
+        assert!(handler.contains("sized_chrome.size_allocate"));
+        assert!(handler.contains("sized_chrome.set_size_request"));
     }
 }
 
