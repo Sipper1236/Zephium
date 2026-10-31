@@ -7485,6 +7485,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "windows-sys 0.61.2",
+ "zbus",
  "zeroize",
 ]
 

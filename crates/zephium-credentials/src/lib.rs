@@ -81,6 +81,11 @@ mod macos;
 #[cfg(target_os = "macos")]
 pub use macos::{delete, present, read, write};
 
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "linux")]
+pub use linux::{delete, list, present, read, write};
+
 #[cfg(test)]
 mod tests {
     use super::*;
