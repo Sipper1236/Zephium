@@ -2,9 +2,12 @@
 //! process aborts, and showing that folder to the person. Nothing here sends
 //! anything anywhere; a report leaves the device only if someone attaches it.
 
-use std::path::{Path, PathBuf};
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::OnceLock;
 
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 const CRASH_REPORT: &str = "last-crash.txt";
 
 static LOG_DIR: OnceLock<PathBuf> = OnceLock::new();
@@ -13,6 +16,7 @@ static LOG_DIR: OnceLock<PathBuf> = OnceLock::new();
 /// the default hook's message goes to a stderr nobody may be reading, or into
 /// a pipe that never drains before the abort; this one also writes a small
 /// file synchronously.
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(crate) fn install(dir: PathBuf) {
     if LOG_DIR.set(dir).is_err() {
         return;
@@ -40,6 +44,7 @@ pub(crate) fn install(dir: PathBuf) {
     }));
 }
 
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     use std::io::Write;
     let mut options = std::fs::OpenOptions::new();
@@ -52,7 +57,7 @@ fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     options.open(path)?.write_all(bytes)
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "macos")]
 fn libc_nofollow() -> i32 {
     #[cfg(target_os = "macos")]
     {

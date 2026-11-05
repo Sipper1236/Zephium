@@ -2564,6 +2564,7 @@ impl WebViewBuilderExtAndroid for WebViewBuilder<'_> {
 ))]
 #[derive(Default)]
 pub(crate) struct PlatformSpecificWebViewAttributes {
+  native_download_handler: Option<Box<dyn Fn(&webkit2gtk::Download)>>,
   extension_path: Option<PathBuf>,
   related_view: Option<webkit2gtk::WebView>,
 }
@@ -2590,6 +2591,10 @@ pub trait WebViewBuilderExtUnix<'a> {
   where
     W: gtk::prelude::IsA<gtk::Container>;
 
+  /// Route this view's native downloads to the embedder before destination selection.
+  /// The embedder must retain callbacks and set a destination or cancel.
+  fn with_native_download_handler(self, handler: impl Fn(&webkit2gtk::Download) + 'static) -> Self;
+
   /// Set the path from which to load extensions from.
   fn with_extensions_path(self, path: impl Into<PathBuf>) -> Self;
 
@@ -2614,6 +2619,14 @@ impl<'a> WebViewBuilderExtUnix<'a> for WebViewBuilder<'a> {
 
     InnerWebView::new_gtk(widget, self.attrs, self.platform_specific)
       .map(|webview| WebView { webview })
+  }
+
+  fn with_native_download_handler(
+    mut self,
+    handler: impl Fn(&webkit2gtk::Download) + 'static,
+  ) -> Self {
+    self.platform_specific.native_download_handler = Some(Box::new(handler));
+    self
   }
 
   fn with_extensions_path(mut self, path: impl Into<PathBuf>) -> Self {

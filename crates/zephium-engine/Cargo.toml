@@ -157,6 +157,7 @@ windows-numerics = "0.2"
 
 [target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
 gtk = "0.18"
+libc = "0.2"
 webkit2gtk = { version = "=2.0.2", features = ["v2_40"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]

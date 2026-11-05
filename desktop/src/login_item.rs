@@ -1,8 +1,12 @@
 //! Opening Zephium at login. macOS lists the app under Open at Login through
 //! `SMAppService`; Windows keeps a per-user `Run` value. Either way the answer
 //! is read back from the system, so a change made in its own settings shows.
+//! Linux uses the same readback contract through XDG Autostart.
 
 use super::*;
+
+#[cfg(target_os = "linux")]
+mod linux;
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, specta::Type, PartialEq, Eq)]
 pub(crate) struct LoginItemStatus {
@@ -224,12 +228,14 @@ fn status() -> LoginItemStatus {
     return macos::status();
     #[cfg(target_os = "windows")]
     return windows::status();
+    #[cfg(target_os = "linux")]
+    return linux::status();
     #[allow(unreachable_code)]
     LoginItemStatus::default()
 }
 
 #[cfg_attr(
-    not(any(target_os = "macos", target_os = "windows")),
+    not(any(target_os = "macos", target_os = "windows", target_os = "linux")),
     allow(unused_variables)
 )]
 fn set(enabled: bool) {
@@ -237,6 +243,8 @@ fn set(enabled: bool) {
     macos::set(enabled);
     #[cfg(target_os = "windows")]
     windows::set(enabled);
+    #[cfg(target_os = "linux")]
+    linux::set(enabled);
 }
 
 #[tauri::command]

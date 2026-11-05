@@ -128,7 +128,10 @@ impl Destination {
         if expected_bytes.is_some_and(|bytes| metadata.len() != bytes) {
             return Err(DownloadError::Integrity);
         }
+        #[cfg(target_os = "macos")]
         quarantine(&self.payload(), source)?;
+        #[cfg(target_os = "linux")]
+        quarantine(&file, source)?;
         self.verify_namespace()?;
         let after = fs::symlink_metadata(self.payload()).map_err(map_io)?;
         if after.dev() != metadata.dev() || after.ino() != metadata.ino() {
@@ -149,12 +152,11 @@ impl Destination {
             // Same-volume, descriptor-relative and exclusive. There is no
             // check-then-overwrite race, even for concurrent same-name downloads.
             let result = unsafe {
-                libc::renameatx_np(
+                exclusive_rename(
                     self.staging.as_raw_fd(),
                     c"payload".as_ptr(),
                     self.parent.as_raw_fd(),
                     native_name.as_ptr(),
-                    libc::RENAME_EXCL,
                 )
             };
             if result == 0 {
@@ -320,6 +322,7 @@ fn map_io(error: std::io::Error) -> DownloadError {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn verify_quarantine(file: &File) -> Result<(), DownloadError> {
     // Read metadata on the held file, not on a path that may have changed.
     let size = unsafe {
@@ -339,10 +342,12 @@ fn verify_quarantine(file: &File) -> Result<(), DownloadError> {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn quarantine(path: &Path, source: &str) -> Result<(), DownloadError> {
     objc2::rc::autoreleasepool(|_| quarantine_in_pool(path, source))
 }
 
+#[cfg(target_os = "macos")]
 fn quarantine_in_pool(path: &Path, source: &str) -> Result<(), DownloadError> {
     use objc2::runtime::AnyObject;
     use objc2_foundation::{
@@ -386,9 +391,118 @@ fn quarantine_in_pool(path: &Path, source: &str) -> Result<(), DownloadError> {
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
+unsafe fn exclusive_rename(
+    from: i32,
+    leaf: *const libc::c_char,
+    to: i32,
+    name: *const libc::c_char,
+) -> i32 {
+    libc::renameatx_np(from, leaf, to, name, libc::RENAME_EXCL)
+}
+
+#[cfg(target_os = "linux")]
+unsafe fn exclusive_rename(
+    from: i32,
+    leaf: *const libc::c_char,
+    to: i32,
+    name: *const libc::c_char,
+) -> i32 {
+    libc::renameat2(from, leaf, to, name, libc::RENAME_NOREPLACE)
+}
+
+// Linux has no universal quarantine service. Preserve desktop download
+// provenance and strip executable permissions before exclusive publication.
+// A filesystem that cannot retain this marker fails closed.
+#[cfg(target_os = "linux")]
+fn quarantine(file: &File, source: &str) -> Result<(), DownloadError> {
+    use std::os::unix::fs::PermissionsExt;
+    if !file.metadata().map_err(map_io)?.is_file()
+        || source.len() > 8192
+        || zephium_core::permissions::PageOrigin::parse_exact(source).is_err()
+    {
+        return Err(DownloadError::Protection);
+    }
+    file.set_permissions(fs::Permissions::from_mode(0o600))
+        .map_err(map_io)?;
+    let result = unsafe {
+        libc::fsetxattr(
+            file.as_raw_fd(),
+            c"user.xdg.origin.url".as_ptr(),
+            source.as_ptr().cast(),
+            source.len(),
+            0,
+        )
+    };
+    if result != 0 {
+        return Err(DownloadError::Protection);
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn verify_quarantine(file: &File) -> Result<(), DownloadError> {
+    let metadata = file.metadata().map_err(map_io)?;
+    if metadata.mode() & 0o111 != 0 {
+        return Err(DownloadError::Protection);
+    }
+    let mut value = [0u8; 8193];
+    let length = unsafe {
+        libc::fgetxattr(
+            file.as_raw_fd(),
+            c"user.xdg.origin.url".as_ptr(),
+            value.as_mut_ptr().cast(),
+            value.len(),
+        )
+    };
+    let origin = usize::try_from(length)
+        .ok()
+        .filter(|length| *length <= 8192)
+        .and_then(|length| std::str::from_utf8(&value[..length]).ok())
+        .and_then(|value| zephium_core::permissions::PageOrigin::parse_exact(value).ok());
+    if origin.is_some() {
+        Ok(())
+    } else {
+        Err(DownloadError::Protection)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_publication_requires_provenance_and_strips_executable_bits() {
+        use std::os::unix::fs::PermissionsExt;
+        let directory = tempfile::tempdir().unwrap();
+        let destination = Destination::prepare(
+            DownloadId::generate(),
+            directory.path().join("script.sh"),
+            None,
+        )
+        .unwrap();
+        fs::write(destination.payload(), b"#!/bin/sh\nexit 0\n").unwrap();
+        fs::set_permissions(destination.payload(), fs::Permissions::from_mode(0o755)).unwrap();
+        let (path, identity) = destination.finish("https://example.com", None).unwrap();
+        assert_eq!(fs::metadata(&path).unwrap().mode() & 0o777, 0o600);
+        verify_file(&path, &identity).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+        assert_eq!(
+            verify_file(&path, &identity),
+            Err(DownloadError::Protection)
+        );
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+        let file = File::open(&path).unwrap();
+        assert_eq!(
+            unsafe { libc::fremovexattr(file.as_raw_fd(), c"user.xdg.origin.url".as_ptr()) },
+            0
+        );
+        assert_eq!(
+            verify_file(&path, &identity),
+            Err(DownloadError::Protection)
+        );
+    }
 
     #[test]
     fn a_saved_directory_cannot_be_redirected_before_the_next_download() {

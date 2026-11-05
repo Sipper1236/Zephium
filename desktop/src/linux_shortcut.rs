@@ -4,11 +4,28 @@ const MAX_ACCELERATOR_BYTES: usize = 128;
 
 pub(crate) const LAUNCHER_COMMAND_ID: &str = "launcher.toggle";
 
+use zephium_core::accelerator::{Accelerator, Key, Platform};
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum LinuxLauncherKey {
     Space,
     Tab,
     AsciiAlphanumeric(u8),
+    Function(u8),
+}
+
+impl LinuxLauncherKey {
+    fn core_key(self) -> Key {
+        match self {
+            Self::Space => Key::Space,
+            Self::Tab => Key::Tab,
+            Self::Function(number) => Key::Function(number),
+            Self::AsciiAlphanumeric(byte) if byte.is_ascii_alphabetic() => {
+                Key::Letter(byte.to_ascii_uppercase())
+            }
+            Self::AsciiAlphanumeric(byte) => Key::Digit(byte),
+        }
+    }
 }
 
 /// The one Linux launcher-accelerator representation consumed by the portal,
@@ -87,21 +104,24 @@ impl LinuxLauncherShortcut {
     }
 
     pub(crate) fn focused_shortcut(self) -> zephium_core::ports::engine::Shortcut {
-        let key = match self.key {
-            LinuxLauncherKey::Space => 0x20,
-            LinuxLauncherKey::Tab => 0x09,
-            LinuxLauncherKey::AsciiAlphanumeric(key) if key.is_ascii_alphabetic() => {
-                u32::from(key.to_ascii_uppercase())
-            }
-            LinuxLauncherKey::AsciiAlphanumeric(key) => u32::from(key),
-        };
         zephium_core::ports::engine::Shortcut {
             id: LAUNCHER_COMMAND_ID.to_owned(),
             ctrl: self.ctrl,
             shift: self.shift,
             alt: self.alt,
-            key,
+            key: self.key.core_key().virtual_key(),
         }
+    }
+
+    pub(crate) fn accelerator(self) -> String {
+        Accelerator {
+            meta: false,
+            ctrl: self.ctrl,
+            shift: self.shift,
+            alt: self.alt,
+            key: self.key.core_key(),
+        }
+        .format(Platform::Other)
     }
 
     pub(crate) fn portal_trigger(self) -> String {
@@ -116,9 +136,10 @@ impl LinuxLauncherShortcut {
             parts.push("SHIFT".to_owned());
         }
         let key = match self.key {
+            LinuxLauncherKey::AsciiAlphanumeric(byte) => char::from(byte).to_string(),
             LinuxLauncherKey::Space => "space".to_owned(),
             LinuxLauncherKey::Tab => "Tab".to_owned(),
-            LinuxLauncherKey::AsciiAlphanumeric(key) => char::from(key).to_string(),
+            LinuxLauncherKey::Function(number) => format!("F{number}"),
         };
         parts.push(key);
         parts.join("+")
@@ -126,18 +147,18 @@ impl LinuxLauncherShortcut {
 }
 
 fn parse_key(token: &str) -> Option<LinuxLauncherKey> {
-    if token.eq_ignore_ascii_case("space") {
-        return Some(LinuxLauncherKey::Space);
-    }
-    if token.eq_ignore_ascii_case("tab") {
-        return Some(LinuxLauncherKey::Tab);
-    }
-    if token.len() == 1 && token.as_bytes()[0].is_ascii_alphanumeric() {
-        return Some(LinuxLauncherKey::AsciiAlphanumeric(
-            token.as_bytes()[0].to_ascii_lowercase(),
-        ));
-    }
-    None
+    // Keep the stricter modifier grammar above, but share the registry's key
+    // names (including DOM recorder codes) and VK translation on every backend.
+    let parsed = Accelerator::parse(&format!("Ctrl+{token}"), Platform::Other)?;
+    Some(match parsed.key {
+        Key::Space => LinuxLauncherKey::Space,
+        Key::Tab => LinuxLauncherKey::Tab,
+        Key::Letter(byte) | Key::Digit(byte) => {
+            LinuxLauncherKey::AsciiAlphanumeric(byte.to_ascii_lowercase())
+        }
+        Key::Function(number) => LinuxLauncherKey::Function(number),
+        _ => return None,
+    })
 }
 
 #[cfg(test)]
@@ -186,5 +207,28 @@ mod tests {
         }
         let oversized = format!("Ctrl+{}", "x".repeat(MAX_ACCELERATOR_BYTES));
         assert!(LinuxLauncherShortcut::parse(&oversized).is_none());
+    }
+
+    #[test]
+    fn registry_and_recorder_key_names_keep_the_same_meaning() {
+        for text in [
+            "Ctrl+Alt+KeyK",
+            "Ctrl+Shift+Digit3",
+            "Ctrl+Shift+F1",
+            "Ctrl+F12",
+        ] {
+            let shortcut = LinuxLauncherShortcut::parse(text).expect("registry key");
+            let core = Accelerator::parse(text, Platform::Other).expect("core key");
+            assert_eq!(shortcut.focused_shortcut().key, core.key.virtual_key());
+            assert_eq!(shortcut.accelerator(), core.format(Platform::Other));
+            assert_eq!(
+                LinuxLauncherShortcut::parse(&shortcut.accelerator()),
+                Some(shortcut)
+            );
+            assert!(!shortcut.portal_trigger().is_empty());
+        }
+        for text in ["Ctrl+F0", "Ctrl+F13", "Ctrl+KeyKK", "Ctrl+DigitA"] {
+            assert!(LinuxLauncherShortcut::parse(text).is_none());
+        }
     }
 }

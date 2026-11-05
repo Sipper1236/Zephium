@@ -5770,12 +5770,6 @@ fn install_async_runtime() {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    if cfg!(all(unix, not(target_os = "macos"))) {
-        diagnostic!(
-            "Zephium isn't available on Linux yet. We're working on it; follow https://zephium.app for news."
-        );
-        std::process::exit(1);
-    }
     install_async_runtime();
     APP_STARTED.get_or_init(std::time::Instant::now);
     #[cfg(target_os = "macos")]
@@ -6080,6 +6074,12 @@ pub fn run() {
             // Onboarding composes for one size; the browser takes the window
             // back resizable once it has replaced onboarding.
             if onboarding {
+                // Wayland's compositor owns the final geometry, including
+                // fullscreen/tiled startup on displays smaller than our
+                // preferred size. GTK fixes both min and max to the current
+                // size for a non-resizable window; that can violate the first
+                // xdg_surface configure and disconnect the whole application.
+                #[cfg(not(target_os = "linux"))]
                 window.set_resizable(false)?;
                 window.set_maximizable(false)?;
             }
@@ -6268,10 +6268,12 @@ pub fn run() {
             let focused_shortcut_presses = platform::imp::FocusedShortcutPresses::default();
             #[cfg(target_os = "linux")]
             let linux_launcher_shortcut = {
-                let accelerator = zephium_core::commands::resolve(&keymap)
-                    .iter()
-                    .find(|command| command.id == linux_shortcut::LAUNCHER_COMMAND_ID)
-                    .and_then(|command| command.accelerator.clone());
+                let accelerator = launcher_trigger::stored_linux_shortcut().or_else(|| {
+                    zephium_core::commands::resolve(&keymap)
+                        .iter()
+                        .find(|command| command.id == linux_shortcut::LAUNCHER_COMMAND_ID)
+                        .and_then(|command| command.accelerator.clone())
+                });
                 let shortcut = accelerator
                     .as_deref()
                     .and_then(linux_shortcut::LinuxLauncherShortcut::parse);
@@ -8066,7 +8068,18 @@ mod tests {
             .nth(1)
             .and_then(|body| body.split("pub(crate) fn shutdown").next())
             .expect("bounded post-map Wayland startup");
-        assert!(portal_start.contains("zephium-wayland-shortcut"));
+        assert!(portal_start.contains("state.mapped = true"));
+        assert!(portal_start.contains("self.start_worker"));
+        let portal_worker = linux_backend
+            .split("DisplayBackend::Wayland =>")
+            .nth(1)
+            .expect("Wayland worker startup");
+        assert!(
+            portal_worker
+                .find("if !state.mapped")
+                .expect("mapping gate")
+                < portal_worker.find(".spawn(").expect("portal worker spawn")
+        );
     }
 
     #[test]

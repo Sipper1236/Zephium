@@ -56,21 +56,44 @@ pub(crate) struct ActivationContext {
 
 pub(crate) struct ActivationTarget {
     active: AtomicBool,
+    suppressed: AtomicBool,
     activation: Mutex<Option<Activation>>,
 }
 
 #[derive(Clone, Default)]
 pub(crate) struct GlobalRegistration {
-    live: Arc<AtomicBool>,
+    state: Arc<Mutex<RegistrationState>>,
+    generation: u64,
+}
+
+#[derive(Default)]
+struct RegistrationState {
+    live: bool,
+    generation: u64,
 }
 
 impl GlobalRegistration {
     pub(crate) fn is_live(&self) -> bool {
-        self.live.load(Ordering::Acquire)
+        lock_recover(&self.state).live
     }
 
     pub(crate) fn set_live(&self, live: bool) {
-        self.live.store(live, Ordering::Release);
+        let mut state = lock_recover(&self.state);
+        if state.generation == self.generation {
+            state.live = live;
+        }
+    }
+
+    /// Revokes stale workers before replacing a native registration. Readers
+    /// keep observing the current capability; an old cleanup cannot clear it.
+    pub(crate) fn next_generation(&self) -> Self {
+        let mut state = lock_recover(&self.state);
+        state.generation = state.generation.wrapping_add(1);
+        state.live = false;
+        Self {
+            state: self.state.clone(),
+            generation: state.generation,
+        }
     }
 }
 
@@ -93,6 +116,7 @@ impl ActivationTarget {
     pub(crate) fn new(activation: impl Fn(ActivationContext) + Send + Sync + 'static) -> Self {
         Self {
             active: AtomicBool::new(true),
+            suppressed: AtomicBool::new(false),
             activation: Mutex::new(Some(Arc::new(activation))),
         }
     }
@@ -107,12 +131,18 @@ impl ActivationTarget {
         // callback can begin after revocation and none remains in flight when
         // stop returns.
         let activation = lock_recover(&self.activation);
-        if !self.is_active() {
+        if !self.is_active() || self.suppressed.load(Ordering::Acquire) {
             return;
         }
         if let Some(activation) = activation.as_ref() {
             activation(context);
         }
+    }
+
+    pub(crate) fn set_suppressed(&self, suppressed: bool) {
+        // Serialize with the short scheduling callback, as stop does.
+        let _activation = lock_recover(&self.activation);
+        self.suppressed.store(suppressed, Ordering::Release);
     }
 
     pub(crate) fn stop(&self) {
@@ -1125,6 +1155,44 @@ impl fmt::Display for PortalError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn replaced_registration_ignores_stale_worker_publication_and_cleanup() {
+        let reader = GlobalRegistration::default();
+        let stale = reader.clone();
+        stale.set_live(true);
+        assert!(reader.is_live());
+        let current = reader.next_generation();
+        assert!(!reader.is_live());
+        stale.set_live(true);
+        assert!(!reader.is_live());
+        let guard = ClearRegistrationOnDrop::acquire(&current);
+        assert!(reader.is_live());
+        stale.set_live(false);
+        assert!(reader.is_live());
+        drop(guard);
+        assert!(!reader.is_live());
+    }
+
+    #[test]
+    fn recording_suppression_does_not_revoke_the_activation_owner() {
+        let count = Arc::new(AtomicUsize::new(0));
+        let observed = count.clone();
+        let target = ActivationTarget::new(move |_| {
+            observed.fetch_add(1, Ordering::Relaxed);
+        });
+        target.set_suppressed(true);
+        target.activate(ActivationContext::default());
+        assert_eq!(count.load(Ordering::Relaxed), 0);
+        assert!(target.is_active());
+        target.set_suppressed(false);
+        target.activate(ActivationContext::default());
+        assert_eq!(count.load(Ordering::Relaxed), 1);
+        target.stop();
+        target.set_suppressed(false);
+        target.activate(ActivationContext::default());
+        assert_eq!(count.load(Ordering::Relaxed), 1);
+    }
 
     #[test]
     fn portal_paths_are_exact_and_dbus_safe() {

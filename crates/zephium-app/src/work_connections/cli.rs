@@ -54,6 +54,8 @@ impl Cli {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CliAuth {
+    /// The command broker cannot admit even an account-status probe.
+    Unavailable,
     /// Signed in; the account's public name when the tool says it.
     SignedIn(Option<String>),
     SignedOut,
@@ -423,6 +425,14 @@ pub fn auth_of(cli: Cli, ok: bool, out: &str) -> CliAuth {
 
 /// One tool's status, found and asked afresh.
 pub async fn status(cli: Cli) -> CliStatus {
+    if ensure_available().is_err() {
+        return CliStatus {
+            cli,
+            path: None,
+            version: None,
+            auth: CliAuth::Unavailable,
+        };
+    }
     let path = tokio::task::spawn_blocking(move || locate(cli))
         .await
         .ok()
@@ -479,7 +489,7 @@ mod tests {
         assert!(ensure_available().is_err());
         let directory = tempfile::Builder::new()
             .prefix("work-cli-gate-")
-            .tempdir_in("/private/tmp")
+            .tempdir()
             .unwrap();
         let marker = directory.path().join("executed");
         let program = directory.path().join("fixture-cli");
@@ -535,7 +545,7 @@ mod tests {
                     .is_none());
                 let status = status(Cli::Gh).await;
                 assert!(!status.usable());
-                assert_eq!(status.auth, CliAuth::Unknown);
+                assert_eq!(status.auth, CliAuth::Unavailable);
             });
         assert!(!marker.exists());
     }

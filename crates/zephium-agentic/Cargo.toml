@@ -69,3 +69,6 @@ zephium-credentials = { workspace = true, optional = true }
 proptest.workspace = true
 # Parses saved results pages into the page script's wire in tests only.
 dom_query = { version = "=0.28.0", default-features = false }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zephium-credentials = { workspace = true, optional = true }

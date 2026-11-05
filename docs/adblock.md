@@ -9,7 +9,8 @@ refresh, and retry. Rust owns durable state and exact operation settlement.
 
 macOS native fixtures and the isolated browser QA build have been exercised.
 Windows protection has been measured on physical hardware; the Windows engine
-still needs per-release WebView2 qualification. Linux is not supported.
+still needs per-release WebView2 qualification. Linux uses an experimental
+WebKitGTK adapter; see [the Linux guide](linux.md) for its qualification limits.
 
 Protection defaults on for new profiles. META migration 23 enables existing
 profiles once, preserving site pauses and personal hides; subsequent explicit

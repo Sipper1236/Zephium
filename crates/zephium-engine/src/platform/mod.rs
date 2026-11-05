@@ -14,6 +14,8 @@ pub(crate) mod form_qualification;
     feature = "agentic-browser",
     any(target_os = "macos", target_os = "windows", test)
 ))]
+// Linux retains shared unit tests, but has no native callers of this API yet.
+#[cfg_attr(all(test, target_os = "linux"), allow(dead_code))]
 pub(crate) mod record_media;
 #[cfg(all(
     feature = "agentic-browser",
@@ -44,6 +46,7 @@ pub(crate) mod page_recipe;
     feature = "agentic-browser",
     any(target_os = "macos", target_os = "windows", test)
 ))]
+#[cfg_attr(all(test, target_os = "linux"), allow(dead_code))]
 pub(crate) mod work_document_navigation;
 
 #[cfg(target_os = "macos")]

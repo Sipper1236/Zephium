@@ -60,6 +60,19 @@ pub(crate) struct X11Shortcut {
 }
 
 impl X11Shortcut {
+    pub(crate) fn wait_registered(&self, timeout: Duration) -> bool {
+        let deadline = std::time::Instant::now() + timeout;
+        loop {
+            if *lock_recover(&self.lifecycle.state) == RegistrationState::Live {
+                return true;
+            }
+            if self.terminal() != WorkerTerminal::Running || std::time::Instant::now() >= deadline {
+                return false;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
     pub(crate) fn spawn(
         shortcut: LinuxLauncherShortcut,
         target: Weak<ActivationTarget>,
@@ -633,15 +646,18 @@ fn launcher_key_to_keysym(key: LinuxLauncherKey) -> Result<RawKeysym, String> {
     match key {
         LinuxLauncherKey::Space => Ok(xkeysym::key::space),
         LinuxLauncherKey::Tab => Ok(xkeysym::key::Tab),
+        LinuxLauncherKey::Function(number) if (1..=12).contains(&number) => {
+            Ok(xkeysym::key::F1 + u32::from(number - 1))
+        }
         // A core XGrabKey binds a physical keycode, while GTK and the portal
         // bind a logical symbol. Correctly translating a configurable text key
         // across active XKB groups and levels requires a full XKB keymap/state
         // resolver. Refuse the global X11 capability instead of silently
         // grabbing whichever physical key happens to contain that symbol;
-        // the exact focused fallback remains available. Space and Tab are the
-        // only layout-independent launcher keys currently admitted here.
-        LinuxLauncherKey::AsciiAlphanumeric(_) => Err(
-            "direct X11 global shortcuts currently require layout-independent Space or Tab"
+        // the exact focused fallback remains available. Space, Tab and F1-F12
+        // are the layout-independent launcher keys admitted here.
+        _ => Err(
+            "direct X11 global shortcuts require layout-independent Space, Tab or F1-F12"
                 .to_owned(),
         ),
     }
@@ -687,6 +703,13 @@ mod tests {
         let layout_dependent =
             LinuxLauncherShortcut::parse("Ctrl+Alt+T").expect("valid shared accelerator");
         assert!(launcher_key_to_keysym(layout_dependent.key()).is_err());
+        for number in [1, 5, 12] {
+            let chord = LinuxLauncherShortcut::parse(&format!("Ctrl+Shift+F{number}")).unwrap();
+            assert_eq!(
+                launcher_key_to_keysym(chord.key()),
+                Ok(xkeysym::key::F1 + number - 1)
+            );
+        }
     }
 
     #[test]

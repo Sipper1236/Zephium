@@ -188,6 +188,7 @@ pub enum PageGlow {
     Paused,
 }
 
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 impl PageGlow {
     pub(crate) const fn name(self) -> &'static str {
         match self {
@@ -371,11 +372,21 @@ impl PageRead {
 
 /// Reads kept per tab: a plan stays bound to the exact read it was made
 /// on, however many reads of the page happen meanwhile.
+#[cfg(any(
+    target_os = "macos",
+    target_os = "windows",
+    all(test, feature = "agentic-browser")
+))]
 const MAX_KEPT_READS: usize = 8;
 
 type KeptReads = HashMap<ItemId, std::collections::VecDeque<Arc<PageRead>>>;
 
 static READS: Mutex<Option<KeptReads>> = Mutex::new(None);
+#[cfg(any(
+    target_os = "macos",
+    target_os = "windows",
+    all(test, feature = "agentic-browser")
+))]
 static NEXT_READ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
 fn with_reads<T>(apply: impl FnOnce(&mut KeptReads) -> T) -> T {
@@ -392,6 +403,11 @@ pub fn planned_read(tab: ItemId, id: u64) -> Option<Arc<PageRead>> {
 }
 
 /// Keeps `read` for the steps that may be planned on it; returns its id.
+#[cfg(any(
+    target_os = "macos",
+    target_os = "windows",
+    all(test, feature = "agentic-browser")
+))]
 pub(crate) fn publish_read(tab: ItemId, mut read: PageRead) -> u64 {
     let id = NEXT_READ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     read.id = id;
@@ -408,7 +424,10 @@ pub(crate) fn publish_read(tab: ItemId, mut read: PageRead) -> u64 {
     id
 }
 
-#[cfg(feature = "agentic-browser")]
+#[cfg(all(
+    feature = "agentic-browser",
+    any(target_os = "macos", target_os = "windows", test)
+))]
 pub(crate) mod read {
     //! A runtime snapshot projected into passages through the semantic read
     //! policy: public content only, the standard budget, verbatim only when
@@ -834,6 +853,7 @@ pub(crate) mod read {
 
     /// One person-directed step bound to the read it was planned on and
     /// prepared against `current`, the page as it is right now.
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     pub(crate) fn person_action(
         stored: &super::PageRead,
         current: &SemanticSnapshot,
@@ -872,6 +892,7 @@ pub(crate) mod read {
     /// Return in a field: a step whose taking may be the document leaving,
     /// as a form submits. Once it was handed to the page, that navigation
     /// is its effect, not a changed page.
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     pub(crate) fn submits(proposal: &zephium_agentic::SemanticActionProposal) -> bool {
         matches!(
             proposal.intent(),
@@ -883,6 +904,7 @@ pub(crate) mod read {
     }
 
     /// Why a prepared step did not take.
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     pub(crate) fn act_failure(
         failure: zephium_agentic::SemanticActionFailure,
     ) -> super::PageActFailure {

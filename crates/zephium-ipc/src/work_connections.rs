@@ -10,6 +10,8 @@ pub const MAX_WORK_SERVER_ENV: usize = 32;
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, PartialEq, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkCliStatusV1 {
+    /// The command broker does not admit this connection or its status probe.
+    Unavailable,
     SignedIn,
     SignedOut,
     /// Installed and needs no account (git).

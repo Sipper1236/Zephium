@@ -37,6 +37,8 @@ pub(crate) enum UpdateStatus {
 
 struct Parked {
     update: tauri_plugin_updater::Update,
+    // Retain verified artifact custody even without a native Linux installer.
+    #[cfg_attr(target_os = "linux", allow(dead_code))]
     artifact: Artifact,
 }
 

@@ -534,7 +534,7 @@ impl InnerWebView {
   pub fn new_gtk<W>(
     container: &W,
     mut attributes: WebViewAttributes,
-    pl_attrs: super::PlatformSpecificWebViewAttributes,
+    mut pl_attrs: super::PlatformSpecificWebViewAttributes,
   ) -> Result<Self>
   where
     W: IsA<gtk::Container>,
@@ -639,7 +639,12 @@ impl InnerWebView {
     Self::set_webview_settings(&webview, &attributes);
 
     // Webview handlers
-    Self::attach_handlers(&webview, web_context, &mut attributes);
+    Self::attach_handlers(
+      &webview,
+      web_context,
+      &mut attributes,
+      pl_attrs.native_download_handler.take(),
+    );
 
     // Do not expose a page-visible bridge unless a native receiver exists.
     let has_ipc_handler = attributes.ipc_handler.is_some();
@@ -805,6 +810,7 @@ impl InnerWebView {
     webview: &WebView,
     web_context: &mut WebContext,
     attributes: &mut WebViewAttributes,
+    native_download_handler: Option<Box<dyn Fn(&webkit2gtk::Download)>>,
   ) {
     // Page close is a request, not permission to invalidate the embedder's
     // logical view/widget ownership. Preserve the child by default and retain
@@ -1143,6 +1149,8 @@ impl InnerWebView {
 
     // Download handler
     web_context.register_download_handler(
+      webview,
+      native_download_handler,
       attributes.download_policy,
       attributes.download_started_handler.take(),
       attributes.download_completed_handler.take(),

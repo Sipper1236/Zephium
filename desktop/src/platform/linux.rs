@@ -204,6 +204,15 @@ fn install_composition(
     let sized_chrome = chrome.clone();
     fixed.connect_size_allocate(move |_, allocation| {
         sized_chrome.set_size_request(allocation.width(), allocation.height());
+        // GtkFixed can retain the child's previous allocation when its own
+        // allocation is unchanged on the follow-up resize pass. Updating the
+        // request alone leaves the WebKit viewport at the old, wider size.
+        sized_chrome.size_allocate(&gtk::Allocation::new(
+            0,
+            0,
+            allocation.width(),
+            allocation.height(),
+        ));
     });
     fixed.show_all();
 
@@ -404,6 +413,41 @@ fn restore_tauri_hierarchy(
 mod native_composition_tests {
     use super::*;
 
+    fn assert_chrome_viewport_follows_window_shrink_and_growth(application: &gtk::Application) {
+        let (window, vbox, chrome, _context) = tauri_tree(application);
+        window.set_decorated(false);
+        window.set_default_size(1200, 800);
+        chrome.set_size_request(1200, 800);
+        install_composition(&window, &vbox, &chrome, |_| Ok(())).expect("composition");
+        show_top_level_only(&window).expect("show window");
+        for (width, height) in [(1200, 800), (600, 480), (1400, 900), (720, 520)] {
+            window.resize(width, height);
+            let deadline = std::time::Instant::now() + Duration::from_secs(2);
+            while std::time::Instant::now() < deadline {
+                while gtk::events_pending() {
+                    gtk::main_iteration_do(false);
+                }
+                if window.allocated_width() == width
+                    && window.allocated_height() == height
+                    && chrome.allocated_width() == width
+                    && chrome.allocated_height() == height
+                {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert_eq!(window.allocated_width(), width, "window must accept shrink");
+            assert_eq!(window.allocated_height(), height);
+            assert_eq!(
+                chrome.allocated_width(),
+                width,
+                "chrome viewport must follow window"
+            );
+            assert_eq!(chrome.allocated_height(), height);
+        }
+        window.close();
+    }
+
     fn tauri_tree(
         application: &gtk::Application,
     ) -> (
@@ -432,6 +476,10 @@ mod native_composition_tests {
         application
             .register(None::<&gtk::gio::Cancellable>)
             .expect("register GTK test application");
+
+        // Keep all native GTK checks in one libtest test: sequential libtest
+        // tests still run on distinct threads, but GTK has one thread owner.
+        assert_chrome_viewport_follows_window_shrink_and_growth(&application);
 
         let (window, vbox, chrome, _context) = tauri_tree(&application);
         install_composition(&window, &vbox, &chrome, |_| Ok(())).expect("composition success");
@@ -646,11 +694,18 @@ fn shortcut_modifiers(shortcut: &Shortcut) -> gtk::gdk::ModifierType {
 }
 
 fn observed_shortcut_modifiers(state: gtk::gdk::ModifierType) -> gtk::gdk::ModifierType {
+    observed_shortcut_modifiers_with_mask(state, gtk::accelerator_get_default_mod_mask())
+}
+
+fn observed_shortcut_modifiers_with_mask(
+    state: gtk::gdk::ModifierType,
+    accelerator_mask: gtk::gdk::ModifierType,
+) -> gtk::gdk::ModifierType {
     // GTK's default accelerator mask deliberately excludes lock modifiers.
     // Keep the virtual modifiers explicit as a defense against a process-wide
     // mask override: the shared Linux parser rejects Meta/Super/Hyper, so the
     // focused fallback must never accept them as an invisible extra chord.
-    let relevant = gtk::accelerator_get_default_mod_mask()
+    let relevant = accelerator_mask
         | gtk::gdk::ModifierType::SUPER_MASK
         | gtk::gdk::ModifierType::HYPER_MASK
         | gtk::gdk::ModifierType::META_MASK;
@@ -673,6 +728,15 @@ mod shortcut_tests {
 
     #[test]
     fn focused_shortcut_requires_exact_non_lock_modifiers() {
+        // Exercise the pure filter without GTK initialization or a display.
+        let observed_shortcut_modifiers = |state| {
+            observed_shortcut_modifiers_with_mask(
+                state,
+                gtk::gdk::ModifierType::CONTROL_MASK
+                    | gtk::gdk::ModifierType::SHIFT_MASK
+                    | gtk::gdk::ModifierType::MOD1_MASK,
+            )
+        };
         let expected = shortcut_modifiers(&launcher_shortcut());
         assert_eq!(
             observed_shortcut_modifiers(
@@ -681,12 +745,21 @@ mod shortcut_tests {
             expected
         );
         for unexpected in [
+            gtk::gdk::ModifierType::MOD1_MASK,
             gtk::gdk::ModifierType::SUPER_MASK,
             gtk::gdk::ModifierType::HYPER_MASK,
             gtk::gdk::ModifierType::META_MASK,
         ] {
             assert_ne!(observed_shortcut_modifiers(expected | unexpected), expected);
         }
+        // Even a process-wide override cannot hide virtual modifiers.
+        assert_eq!(
+            observed_shortcut_modifiers_with_mask(
+                gtk::gdk::ModifierType::SUPER_MASK,
+                gtk::gdk::ModifierType::empty(),
+            ),
+            gtk::gdk::ModifierType::SUPER_MASK,
+        );
     }
 
     #[test]

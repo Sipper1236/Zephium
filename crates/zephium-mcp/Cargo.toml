@@ -48,3 +48,6 @@ required-features = ["fixture"]
 [[test]]
 name = "http"
 required-features = ["http"]
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zephium-credentials = { workspace = true, optional = true }

@@ -10,6 +10,7 @@ const ISSUES_URL: &str = "https://github.com/zephium-browser/Zephium/issues";
 pub(crate) enum StartupProblem {
     NewerProfile,
     DamagedProfile,
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     UnsupportedSystem,
     #[cfg(target_os = "windows")]
     RendererFailed,
@@ -53,6 +54,7 @@ impl StartupProblem {
                 "Zephium couldn't read your profile; it may be damaged. Nothing was deleted.\n\n\
                  Please report this at {ISSUES_URL}\n\nDetails: {detail}"
             ),
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
             Self::UnsupportedSystem => detail.to_owned(),
             Self::Other => format!(
                 "Something went wrong while starting Zephium. Try opening it again.\n\n\
